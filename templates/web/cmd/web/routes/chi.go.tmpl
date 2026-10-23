@@ -19,6 +19,9 @@ func (app *application) routes() http.Handler {
 	// Application routes.
 	mux.Get("/", app.home)
 
+	// Any other path is not found.
+	mux.NotFound(http.HandlerFunc(app.notFound))
+
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
 {{- if .Sessions}}

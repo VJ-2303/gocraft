@@ -1,0 +1,19 @@
+{{define "subject"}}An example email{{end}}
+
+{{define "plainBody"}}
+Hello,
+
+This is an example email from your application, sent to {{.To}}.
+
+Send emails with:
+
+    app.mailer.Send("alice@example.com", data, "example.tmpl")
+
+Each email template defines subject and plainBody blocks, and an optional
+htmlBody block like this one.
+{{end}}
+
+{{define "htmlBody"}}
+<p>Hello,</p>
+<p>This is an example email from your application.</p>
+{{end}}

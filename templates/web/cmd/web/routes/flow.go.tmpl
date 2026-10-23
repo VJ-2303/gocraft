@@ -5,7 +5,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/alexedwards/flow/v2"
+	"github.com/alexedwards/flow"
 )
 
 // routes initializes the application's routes and middleware, and returns
@@ -14,10 +14,13 @@ func (app *application) routes() http.Handler {
 	mux := flow.New()
 
 	// Serve static files from the embedded assets.
-	mux.Handle(http.MethodGet, "/static/", http.FileServerFS(app.assets))
+	mux.Handle("/static/", http.FileServerFS(app.assets), http.MethodGet)
 
 	// Application routes.
-	mux.HandleFunc(http.MethodGet, "/", app.home)
+	mux.HandleFunc("/", app.home, http.MethodGet)
+
+	// Any other path is not found.
+	mux.NotFound = http.HandlerFunc(app.notFound)
 
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux

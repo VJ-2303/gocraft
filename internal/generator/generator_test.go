@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -52,6 +53,20 @@ func TestGateGenerate(t *testing.T) {
 			s.SecureCookies = true
 			s.GitIntegration = true
 			s.Router = spec.RouterGorilla
+			return s
+		}(),
+		// Exercises every Plus platform feature together.
+		"plusapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.Database = spec.DBSQLite
+			s.Migrations = true
+			s.Sessions = true
+			s.SecureCookies = true
+			s.CustomErrorPages = true
+			s.Emails = true
+			s.ErrorNotifications = true
+			s.AutoHTTPS = true
+			s.Router = spec.RouterFlow
 			return s
 		}(),
 		// Exercises a third-party router end to end.
@@ -506,7 +521,7 @@ func TestGenerateAllRouters(t *testing.T) {
 		wantRoute  string
 	}{
 		{spec.RouterServeMux, "", "", `"GET /v1/healthcheck"`},
-		{spec.RouterFlow, `"github.com/alexedwards/flow/v2"`, "github.com/alexedwards/flow/v2", `http.MethodGet, "/v1/healthcheck"`},
+		{spec.RouterFlow, `"github.com/alexedwards/flow"`, "github.com/alexedwards/flow", `mux.HandleFunc("/v1/healthcheck", app.healthcheck, http.MethodGet)`},
 		{spec.RouterChi, `"github.com/go-chi/chi/v5"`, "github.com/go-chi/chi/v5", `mux.Get("/v1/healthcheck"`},
 		{spec.RouterGorilla, `"github.com/gorilla/mux"`, "github.com/gorilla/mux", `Methods(http.MethodGet)`},
 		{spec.RouterHttpRouter, `"github.com/julienschmidt/httprouter"`, "github.com/julienschmidt/httprouter", `mux.GET("/v1/healthcheck"`},
@@ -728,5 +743,66 @@ func TestGenerateSessionsAndCookies(t *testing.T) {
 	}
 	if contains(result2.Files, "internal/cookies/cookies.go") {
 		t.Error("cookies helpers generated without secure cookies option")
+	}
+}
+
+func TestGeneratePlusFeatures(t *testing.T) {
+	s := testSpec()
+	s.CustomErrorPages = true
+	s.Emails = true
+	s.ErrorNotifications = true
+	s.AutoHTTPS = true
+	rsp := resolveFor(t, s)
+
+	target := filepath.Join(t.TempDir(), "example")
+	result, err := Generate(rsp, target, slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	for _, want := range []string{
+		"internal/mailer/mailer.go",
+		"assets/emails/example.tmpl",
+		"assets/emails/error-notification.tmpl",
+		"assets/html/pages/error.tmpl",
+	} {
+		if !contains(result.Files, want) {
+			t.Errorf("want generated file %s, got %v", want, result.Files)
+		}
+	}
+
+	main, err := os.ReadFile(filepath.Join(target, "cmd/web/main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"smtp-host"`,
+		`"admin-email"`,
+		`"https-port"`,
+		"autocert.Manager",
+		"mailer.New(",
+	} {
+		if !strings.Contains(string(main), want) {
+			t.Errorf("cmd/web/main.go want substring %q", want)
+		}
+	}
+
+	// The error page must be in the parsed page list.
+	if !slices.Contains(rsp.WebPages, "error.tmpl") {
+		t.Errorf("want error.tmpl in WebPages, got %v", rsp.WebPages)
+	}
+
+	helpers, err := os.ReadFile(filepath.Join(target, "cmd/web/helpers.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"defaultEmailData",
+		`app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")`,
+		`app.render(w, r, status, "error.tmpl", data)`,
+	} {
+		if !strings.Contains(string(helpers), want) {
+			t.Errorf("cmd/web/helpers.go want substring %q", want)
+		}
 	}
 }

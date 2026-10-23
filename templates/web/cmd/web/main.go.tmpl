@@ -15,6 +15,13 @@ import (
 	"syscall"
 	"time"
 
+{{- if .AutoHTTPS}}
+	"crypto/tls"
+	"net/url"
+
+	"golang.org/x/crypto/acme/autocert"
+
+{{- end}}
 {{- if eq .LogFormat "colorized"}}
 	"{{.ModulePath}}/internal/log"
 
@@ -29,6 +36,9 @@ import (
 	"{{.ModulePath}}/assets"
 	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/response"
+{{- if .NeedsMailer}}
+	"{{.ModulePath}}/internal/mailer"
+{{- end}}
 {{- if .NeedsDB}}
 	_ "{{.Driver.ImportPath}}"
 
@@ -84,6 +94,19 @@ func run() error {
 {{- if .SecureCookies}}
 	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for cookie encryption")
 {{- end}}
+{{- if .NeedsMailer}}
+	flag.StringVar(&cfg.smtpHost, "smtp-host", "localhost", "SMTP server host")
+	flag.IntVar(&cfg.smtpPort, "smtp-port", 25, "SMTP server port")
+	flag.StringVar(&cfg.smtpUsername, "smtp-username", "", "SMTP server username")
+	flag.StringVar(&cfg.smtpPassword, "smtp-password", "", "SMTP server password")
+	flag.StringVar(&cfg.smtpFrom, "smtp-from", "noreply@localhost", "sender name and email address")
+{{- end}}
+{{- if .ErrorNotifications}}
+	flag.StringVar(&cfg.adminEmail, "admin-email", "admin@localhost", "admin email address for error notifications")
+{{- end}}
+{{- if .AutoHTTPS}}
+	flag.IntVar(&cfg.httpsPort, "https-port", 443, "port to serve the application on over HTTPS")
+{{- end}}
 	flag.Parse()
 {{- else}}
 	// Read the configuration settings for the application from
@@ -109,6 +132,19 @@ func run() error {
 {{- end}}
 {{- if .SecureCookies}}
 		cookieSecretKey:   env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
+{{- end}}
+{{- if .NeedsMailer}}
+		smtpHost:     env.GetString("SMTP_HOST", "localhost"),
+		smtpPort:     env.GetInt("SMTP_PORT", 25),
+		smtpUsername: env.GetString("SMTP_USERNAME", ""),
+		smtpPassword: env.GetString("SMTP_PASSWORD", ""),
+		smtpFrom:     env.GetString("SMTP_FROM", "noreply@localhost"),
+{{- end}}
+{{- if .ErrorNotifications}}
+		adminEmail: env.GetString("ADMIN_EMAIL", "admin@localhost"),
+{{- end}}
+{{- if .AutoHTTPS}}
+		httpsPort: env.GetInt("HTTPS_PORT", 443),
 {{- end}}
 	}
 {{- end}}
@@ -173,6 +209,18 @@ func run() error {
 {{- end}}
 {{- end}}
 
+{{- if .NeedsMailer}}
+
+	// Initialize the mailer with the embedded email templates and the
+	// configured SMTP settings.
+	mailer, err := mailer.New(logger, assets.EmailFiles, cfg.smtpHost, cfg.smtpPort, cfg.smtpUsername, cfg.smtpPassword, cfg.smtpFrom)
+	if err != nil {
+		return fmt.Errorf("initializing mailer: %w", err)
+	}
+
+	logger.Info("mailer initialized", "host", cfg.smtpHost, "port", cfg.smtpPort)
+{{- end}}
+
 	app := &application{
 		config:    cfg,
 		logger:    logger,
@@ -183,6 +231,9 @@ func run() error {
 {{- end}}
 {{- if .Sessions}}
 		sessionManager: sessionManager,
+{{- end}}
+{{- if .NeedsMailer}}
+		mailer: mailer,
 {{- end}}
 	}
 
@@ -195,6 +246,22 @@ func run() error {
 		WriteTimeout: 10 * time.Second,
 		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
+{{- if .AutoHTTPS}}
+
+	// Parse the base URL to determine the hostname for the TLS
+	// certificate. Automatic HTTPS via Let's Encrypt is enabled for real
+	// hostnames; local development falls back to plain HTTP.
+	u, err := url.Parse(cfg.baseURL)
+	if err != nil {
+		return fmt.Errorf("parsing base URL: %w", err)
+	}
+
+	certManager := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache("./tmp/certs"),
+		HostPolicy: autocert.HostWhitelist(u.Hostname()),
+	}
+{{- end}}
 
 	// Initialize a channel to receive any errors that occur during the
 	// graceful shutdown of the http.Server instance.
@@ -222,7 +289,32 @@ func run() error {
 	// Call ListenAndServe() to start the server. If it returns
 	// http.ErrServerClosed then that means the server was shut down
 	// gracefully and we can proceed; any other error is a problem.
+{{- if .AutoHTTPS}}
+	if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" {
+		logger.Warn("automatic HTTPS is disabled for local development; serving plain HTTP", "addr", srv.Addr)
+		err = srv.ListenAndServe()
+	} else {
+		// Serve the ACME HTTP-01 challenge and redirect plain HTTP
+		// traffic to HTTPS.
+		go func() {
+			redirectSrv := &http.Server{
+				Addr:    fmt.Sprintf(":%d", cfg.httpPort),
+				Handler: certManager.HTTPHandler(nil),
+			}
+			logger.Info("starting HTTP redirect server", "addr", redirectSrv.Addr)
+			if err := redirectSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
+				logger.Error("HTTP redirect server failed", "error", err)
+			}
+		}()
+
+		srv.Addr = fmt.Sprintf(":%d", cfg.httpsPort)
+		srv.TLSConfig = &tls.Config{GetCertificate: certManager.GetCertificate}
+		logger.Info("starting HTTPS server", "addr", srv.Addr)
+		err = srv.ListenAndServeTLS("", "")
+	}
+{{- else}}
 	err = srv.ListenAndServe()
+{{- end}}
 	if !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -262,6 +354,19 @@ type config struct {
 {{- if .Sessions}}
 	sessionCookieName string
 {{- end}}
+{{- if .NeedsMailer}}
+	smtpHost     string
+	smtpPort     int
+	smtpUsername string
+	smtpPassword string
+	smtpFrom     string
+{{- end}}
+{{- if .ErrorNotifications}}
+	adminEmail string
+{{- end}}
+{{- if .AutoHTTPS}}
+	httpsPort int
+{{- end}}
 }
 
 // application holds the dependencies of the application. Handlers, helpers
@@ -276,6 +381,9 @@ type application struct {
 {{- end}}
 {{- if .Sessions}}
 	sessionManager *scs.SessionManager
+{{- end}}
+{{- if .NeedsMailer}}
+	mailer mailer.Mailer
 {{- end}}
 	wg        sync.WaitGroup
 }

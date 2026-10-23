@@ -54,19 +54,19 @@ var drivers = map[Database]DriverInfo{
 // files. The generated Makefile's `tidy` and `upgradeable` targets manage
 // these going forward.
 var requireVersions = map[string]string{
-	"github.com/jmoiron/sqlx":             "v1.4.0",
-	"modernc.org/sqlite":                  "v1.39.1",
-	"github.com/jackc/pgx/v5":             "v5.7.6",
-	"github.com/go-sql-driver/mysql":      "v1.9.3",
-	"github.com/alexedwards/flow/v2":      "v2.2.0",
-	"github.com/go-chi/chi/v5":            "v5.2.3",
-	"github.com/gorilla/mux":              "v1.8.1",
+	"github.com/jmoiron/sqlx":         "v1.4.0",
+	"modernc.org/sqlite":              "v1.61.0",
+	"github.com/jackc/pgx/v5":         "v5.11.0",
+	"github.com/go-sql-driver/mysql":  "v1.10.1",
+	"github.com/alexedwards/flow":     "v1.2.0",
+	"github.com/go-chi/chi/v5":        "v5.5.0",
+	"github.com/gorilla/mux":          "v1.8.1",
 	"github.com/julienschmidt/httprouter": "v1.3.0",
-	"github.com/alexedwards/scs/v2":       "v2.9.0",
-	"github.com/justinas/nosurf":          "v1.2.0",
-	"github.com/golang-jwt/jwt/v5":        "v5.3.0",
-	"github.com/wneessen/go-mail":         "v0.7.3",
-	"golang.org/x/crypto":                 "v0.43.0",
+	"github.com/alexedwards/scs/v2":   "v2.9.0",
+	"github.com/justinas/nosurf":      "v1.2.0",
+	"github.com/golang-jwt/jwt/v5":    "v5.3.1",
+	"github.com/wneessen/go-mail":     "v0.8.1",
+	"golang.org/x/crypto":             "v0.58.0",
 }
 
 // ResolvedSpec is the template view-model: the raw wizard answers plus
@@ -248,7 +248,7 @@ func (s ProjectSpec) requires(r *ResolvedSpec) []RequireLine {
 
 	switch s.Router {
 	case RouterFlow:
-		add("github.com/alexedwards/flow/v2")
+		add("github.com/alexedwards/flow")
 	case RouterChi:
 		add("github.com/go-chi/chi/v5")
 	case RouterGorilla:
