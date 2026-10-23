@@ -1,0 +1,15 @@
+{{- if eq .Dialect "sqlite"}}
+# SQLite database files
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+{{- end}}
+
+# Compiled binaries and live-reload output
+/bin/
+/tmp/
+
+# Test and coverage artifacts
+*.test
+*.out
+coverage.html

@@ -1,0 +1,99 @@
+# Command-line and environment variable settings for the admin commands.
+GOFLAGS ?= -trimpath
+STATICCHECK := go run honnef.co/go/tools/cmd/staticcheck@latest
+GOVULNCHECK := go run golang.org/x/vuln/cmd/govulncheck@latest
+{{- if .Migrations}}
+MIGRATE := go run -tags '{{.MigrateTags}}' github.com/golang-migrate/migrate/v4/cmd/migrate@v4.18.3
+MIGRATIONS_DIR ?= assets/migrations
+DB_DSN ?= {{.Driver.ExampleDSN}}
+{{- end}}
+
+.DEFAULT_GOAL := help
+
+## help: Print a list of available commands with their descriptions.
+help:
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_\/-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+## audit: Run all tests, verify modules, check .go file formatting, and run go vet, staticcheck and govulncheck.
+audit: test
+	go mod verify
+	test -z "$$(gofmt -l .)" || (gofmt -l . && echo "code is not gofmt-clean" && exit 1)
+	go vet ./...
+	$(STATICCHECK) ./...
+	$(GOVULNCHECK) ./...
+
+## test: Run all tests, with race detection and VCS stamping enabled.
+test:
+	go test $(GOFLAGS) -race ./...
+
+## test/cover: Run all tests with coverage, save results to /tmp/coverage.out, and display an HTML report.
+test/cover:
+	go test $(GOFLAGS) -race -coverprofile=/tmp/coverage.out ./...
+	go tool cover -html=/tmp/coverage.out -o /tmp/coverage.html
+	go tool cover -func=/tmp/coverage.out
+
+## upgradeable: List direct module dependencies that have upgrades available and optionally update them.
+upgradeable:
+	go list -u -m -f '{{"{{if and (not .Indirect) .Update}}{{.Path}}: {{.Version}} -> {{.Update.Version}}{{end}}"}}' all
+
+## tidy: Run go mod tidy -v, apply go fix, and format all Go files with go fmt.
+tidy:
+	go mod tidy -v
+	go fix ./...
+	gofmt -w .
+
+## build: Build the {{.CmdDir}} application and output the binary to /tmp/bin.
+build:
+	go build $(GOFLAGS) -o /tmp/bin/{{.CmdDir}} ./cmd/{{.CmdDir}}
+
+## run: Build and run the {{.CmdDir}} application.
+run: build
+	/tmp/bin/{{.CmdDir}}
+
+## run/live: Build and run the {{.CmdDir}} application with live reloading, rebuilding on file changes.
+run/live:
+	@if ! command -v air >/dev/null 2>&1; then \
+		echo "air is not installed; install it with: go install github.com/air-verse/air@latest"; \
+		exit 1; \
+	fi
+	@test -f .air.toml || printf '%s\n' \
+		'root = "."' \
+		'tmp_dir = "tmp"' \
+		'' \
+		'[build]' \
+		'pre_cmd = ["echo Building application..."]' \
+		'cmd = "go build -o ./tmp/{{.CmdDir}} ./cmd/{{.CmdDir}}"' \
+		'bin = "./tmp/{{.CmdDir}}"' \
+		'post_cmd = ["echo Application restarted."]' \
+		'include_ext = ["go", "tmpl", "sql", "css", "js"]' \
+		'exclude_dir = ["tmp", "vendor"]' \
+		> .air.toml
+	air
+{{- if .Migrations}}
+
+## migrations/new: Create a new pair of migration files in $(MIGRATIONS_DIR). Usage: make migrations/new name=add_example_table
+migrations/new:
+	$(MIGRATE) create -seq -ext=.sql -dir=$(MIGRATIONS_DIR) -name=$(name)
+
+## migrations/up: Apply all up migrations.
+migrations/up:
+	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" up
+
+## migrations/down: Roll back the most recent migration.
+migrations/down:
+	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" down 1
+
+## migrations/goto: Migrate up or down to a specific version. Usage: make migrations/goto version=N
+migrations/goto:
+	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" goto $(version)
+
+## migrations/force: Set the database to a version without running migrations. Usage: make migrations/force version=N
+migrations/force:
+	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" force $(version)
+
+## migrations/version: Print the current migration version.
+migrations/version:
+	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" version
+{{- end}}
+
+.PHONY: help audit test test/cover upgradeable tidy build run run/live{{- if .Migrations}} migrations/new migrations/up migrations/down migrations/goto migrations/force migrations/version{{- end}}

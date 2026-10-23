@@ -96,6 +96,14 @@ type ResolvedSpec struct {
 	// NeedsDB is false.
 	Driver DriverInfo
 
+	// MigrateTags are the golang-migrate build tags matching the dialect,
+	// used by the Makefile migration targets.
+	MigrateTags string
+
+	// GoVersion is the Go toolchain version written into the generated
+	// go.mod.
+	GoVersion string
+
 	// NeedsMailer reports whether SMTP sending is required, either because
 	// the emails feature is selected or because a feature like error
 	// notifications or user accounts sends mail.
@@ -192,9 +200,18 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 	}
 
 	r.ProjectName = projectName(s.ModulePath)
+	r.MigrateTags = migrateTags[r.Dialect]
+	r.GoVersion = GoVersion
 	r.Requires = s.requires(&r)
 
 	return r, nil
+}
+
+// migrateTags maps each SQL dialect to its golang-migrate build tag.
+var migrateTags = map[Database]string{
+	DBSQLite:   "sqlite",
+	DBPostgres: "postgres",
+	DBMySQL:    "mysql",
 }
 
 // requires computes the go.mod requirement lines implied by the options.
