@@ -3,7 +3,9 @@
 package main
 
 import (
+{{- if .AccountsFull}}
 	"context"
+{{- end}}
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
