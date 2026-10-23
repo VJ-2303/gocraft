@@ -412,7 +412,7 @@ func TestResolve(t *testing.T) {
 			paths = append(paths, req.Path)
 		}
 		for _, want := range []string{
-			"github.com/alexedwards/flow/v2",
+			"github.com/alexedwards/flow",
 			"github.com/jmoiron/sqlx",
 			"github.com/jackc/pgx/v5",
 			"github.com/alexedwards/scs/v2",
