@@ -1,0 +1,127 @@
+// Package auth provides JSON Web Token creation and verification for
+// bearer-token authentication.
+package auth
+
+import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+)
+
+// Claims are the payload statements carried by a token.
+type Claims struct {
+	// Subject identifies the user, set to their ID.
+	Subject string `json:"sub"`
+
+	// IssuedAt is the unix time at which the token was created.
+	IssuedAt int64 `json:"iat"`
+
+	// ExpiresAt is the unix time after which the token must be rejected.
+	ExpiresAt int64 `json:"exp"`
+
+	// Scope is a space-separated list of the token's permissions.
+	Scope string `json:"scope,omitempty"`
+}
+
+// Errors returned by verification.
+var (
+	// ErrInvalidToken indicates the token is malformed, has an invalid
+	// signature, or has expired.
+	ErrInvalidToken = errors.New("invalid or expired token")
+)
+
+// Tokenizer creates and verifies signed tokens using HMAC-SHA256.
+type Tokenizer struct {
+	secret []byte
+	issuer string
+}
+
+// NewTokenizer returns a Tokenizer signing tokens with the given
+// base64-encoded 32-byte secret.
+func NewTokenizer(secret string) (Tokenizer, error) {
+	decoded, err := base64.StdEncoding.DecodeString(secret)
+	if err != nil {
+		return Tokenizer{}, fmt.Errorf("failed to base64-decode secret key: %w", err)
+	}
+	if len(decoded) != 32 {
+		return Tokenizer{}, errors.New("secret key must be 32 bytes")
+	}
+
+	return Tokenizer{secret: decoded}, nil
+}
+
+// Create returns a signed token for the given subject, lifetime and
+// scope.
+func (t Tokenizer) Create(subject string, lifetime time.Duration, scope string) (string, error) {
+	now := time.Now().UTC()
+
+	header := `{"alg":"HS256","typ":"JWT"}`
+
+	claims := Claims{
+		Subject:   subject,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(lifetime).Unix(),
+		Scope:     scope,
+	}
+
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", fmt.Errorf("marshaling claims: %w", err)
+	}
+
+	encoded := base64.RawURLEncoding.EncodeToString([]byte(header)) +
+		"." + base64.RawURLEncoding.EncodeToString(claimsJSON)
+
+	mac := hmac.New(sha256.New, t.secret)
+	mac.Write([]byte(encoded))
+
+	return encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil)), nil
+}
+
+// Verify checks a token's signature and expiry, returning its claims. It
+// uses constant-time comparison for the signature.
+func (t Tokenizer) Verify(token string) (Claims, error) {
+	header, claims, signature, ok := splitToken(token)
+	if !ok {
+		return Claims{}, ErrInvalidToken
+	}
+
+	// Recompute the signature over the signed portion.
+	mac := hmac.New(sha256.New, t.secret)
+	mac.Write([]byte(header + "." + claims))
+	expected := mac.Sum(nil)
+
+	got, err := base64.RawURLEncoding.DecodeString(signature)
+	if err != nil || !hmac.Equal(expected, got) {
+		return Claims{}, ErrInvalidToken
+	}
+
+	var c Claims
+	decoded, err := base64.RawURLEncoding.DecodeString(claims)
+	if err != nil {
+		return Claims{}, ErrInvalidToken
+	}
+	if err := json.Unmarshal(decoded, &c); err != nil {
+		return Claims{}, ErrInvalidToken
+	}
+
+	if c.ExpiresAt <= time.Now().UTC().Unix() {
+		return Claims{}, ErrInvalidToken
+	}
+
+	return c, nil
+}
+
+// splitToken breaks a token into its three dot-separated parts.
+func splitToken(token string) (string, string, string, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+		return "", "", "", false
+	}
+	return parts[0], parts[1], parts[2], true
+}

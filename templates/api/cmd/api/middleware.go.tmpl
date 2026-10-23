@@ -10,6 +10,9 @@ import (
 {{- if .RequestLogging}}
 	"time"
 {{- end}}
+{{- if .AccountsJWT}}
+	"strconv"
+{{- end}}
 )
 
 {{- if .RequestLogging}}
@@ -96,3 +99,43 @@ func (app *application) recoverPanic(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+{{- if .AccountsJWT}}
+
+// requireAuthenticatedUser verifies the Authorization: Bearer token,
+// loads the matching user into the request context, and rejects the
+// request when the token is missing, invalid or expired.
+func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token, ok := bearerToken(r)
+		if !ok {
+			app.invalidCredentials(w, r)
+			return
+		}
+
+		claims, err := app.tokenizer.Verify(token)
+		if err != nil {
+			app.invalidCredentials(w, r)
+			return
+		}
+
+		id, err := strconv.ParseInt(claims.Subject, 10, 64)
+		if err != nil {
+			app.invalidCredentials(w, r)
+			return
+		}
+
+		user, found, err := app.users.Get(id)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		if !found || !user.Activated {
+			app.invalidCredentials(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, contextSetAuthenticatedUser(r, user))
+	})
+}
+{{- end}}

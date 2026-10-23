@@ -38,6 +38,9 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/database/database.go.tmpl", OutPath: "internal/database/database.go", Cond: rsp.NeedsDB},
 		{Template: "shared/internal/database/users.go.tmpl", OutPath: "internal/database/users.go", Cond: rsp.HasAuth},
 		{Template: "shared/internal/database/password_resets.go.tmpl", OutPath: "internal/database/password_resets.go", Cond: rsp.AccountsFull},
+		{Template: "shared/internal/database/activation_tokens.go.tmpl", OutPath: "internal/database/activation_tokens.go", Cond: rsp.AccountsJWT},
+		{Template: "shared/internal/auth/jwt.go.tmpl", OutPath: "internal/auth/jwt.go", Cond: rsp.AccountsJWT},
+		{Template: "shared/internal/request/json.go.tmpl", OutPath: "internal/request/json.go", Cond: rsp.AppType == spec.AppAPI},
 		{Template: "shared/internal/env/env.go.tmpl", OutPath: "internal/env/env.go", Cond: rsp.ConfigSource == spec.ConfigEnv},
 		{Template: "shared/internal/log/colorized.go.tmpl", OutPath: "internal/log/colorized.go", Cond: rsp.LogFormat == spec.LogColorized},
 
@@ -52,6 +55,8 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/assets/migrations/000003_create_users_table.down.sql.tmpl", OutPath: "assets/migrations/000003_create_users_table.down.sql", Cond: rsp.HasAuth},
 		{Template: "shared/assets/migrations/000004_create_password_resets_table.up.sql.tmpl", OutPath: "assets/migrations/000004_create_password_resets_table.up.sql", Cond: rsp.AccountsFull},
 		{Template: "shared/assets/migrations/000004_create_password_resets_table.down.sql.tmpl", OutPath: "assets/migrations/000004_create_password_resets_table.down.sql", Cond: rsp.AccountsFull},
+		{Template: "shared/assets/migrations/000004_create_activation_tokens_table.up.sql.tmpl", OutPath: "assets/migrations/000004_create_activation_tokens_table.up.sql", Cond: rsp.AccountsJWT},
+		{Template: "shared/assets/migrations/000004_create_activation_tokens_table.down.sql.tmpl", OutPath: "assets/migrations/000004_create_activation_tokens_table.down.sql", Cond: rsp.AccountsJWT},
 
 		{Template: "shared/internal/cookies/cookies.go.tmpl", OutPath: "internal/cookies/cookies.go", Cond: rsp.SecureCookies},
 		{Template: "shared/internal/mailer/mailer.go.tmpl", OutPath: "internal/mailer/mailer.go", Cond: rsp.NeedsMailer},
@@ -63,6 +68,7 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/assets/emails/example.tmpl", OutPath: "assets/emails/example.tmpl", Cond: rsp.NeedsMailer, Copy: true},
 		{Template: "shared/assets/emails/error-notification.tmpl", OutPath: "assets/emails/error-notification.tmpl", Cond: rsp.ErrorNotifications, Copy: true},
 		{Template: "web/assets/emails/forgot-password.tmpl", OutPath: "assets/emails/forgot-password.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "shared/assets/emails/account-activation.tmpl", OutPath: "assets/emails/account-activation.tmpl", Cond: rsp.AccountsJWT, Copy: true},
 	}
 
 	files = append(files, appFiles(rsp)...)
@@ -125,5 +131,7 @@ func apiFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "api/cmd/api/middleware.go.tmpl", OutPath: "cmd/api/middleware.go", Cond: true},
 		{Template: "api/cmd/api/handlers.go.tmpl", OutPath: "cmd/api/handlers.go", Cond: true},
 		{Template: "api/cmd/api/helpers.go.tmpl", OutPath: "cmd/api/helpers.go", Cond: true},
+		{Template: "api/cmd/api/handlers-auth.go.tmpl", OutPath: "cmd/api/handlers-auth.go", Cond: rsp.AccountsJWT},
+		{Template: "api/cmd/api/context.go.tmpl", OutPath: "cmd/api/context.go", Cond: rsp.AccountsJWT},
 	}
 }

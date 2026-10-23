@@ -12,6 +12,7 @@ type User struct {
 	Created        time.Time `db:"created"`
 	Email          string    `db:"email"`
 	HashedPassword []byte    `db:"hashed_password"`
+	Activated      bool      `db:"activated"`
 }
 
 // UserModel wraps a sqlx.DB and provides methods for working with users.
@@ -22,7 +23,7 @@ type UserModel struct {
 // Insert creates a new user with the given email and hashed password,
 // returning the new user's ID.
 func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
-	query := m.DB.Rebind("INSERT INTO users (created, email, hashed_password) VALUES (?, ?, ?)")
+	query := m.DB.Rebind("INSERT INTO users (created, email, hashed_password, activated) VALUES (?, ?, ?, false)")
 
 	result, err := m.DB.Exec(query, time.Now().UTC(), email, hashedPassword)
 	if err != nil {
@@ -37,10 +38,19 @@ func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
 	return id, nil
 }
 
+// SetActivated marks the user's account as activated (or deactivated).
+// Accounts activate through the emailed activation token flow.
+func (m UserModel) SetActivated(id int64, activated bool) error {
+	query := m.DB.Rebind("UPDATE users SET activated = ? WHERE id = ?")
+
+	_, err := m.DB.Exec(query, activated, id)
+	return err
+}
+
 // Get fetches a single user by ID. The second return value reports
 // whether a matching user was found.
 func (m UserModel) Get(id int64) (*User, bool, error) {
-	query := m.DB.Rebind("SELECT id, created, email, hashed_password FROM users WHERE id = ?")
+	query := m.DB.Rebind("SELECT id, created, email, hashed_password, activated FROM users WHERE id = ?")
 
 	var user User
 	err := m.DB.Get(&user, query, id)
@@ -57,7 +67,7 @@ func (m UserModel) Get(id int64) (*User, bool, error) {
 // GetByEmail fetches a single user with a case-insensitive email match.
 // The second return value reports whether a matching user was found.
 func (m UserModel) GetByEmail(email string) (*User, bool, error) {
-	query := m.DB.Rebind("SELECT id, created, email, hashed_password FROM users WHERE LOWER(email) = LOWER(?)")
+	query := m.DB.Rebind("SELECT id, created, email, hashed_password, activated FROM users WHERE LOWER(email) = LOWER(?)")
 
 	var user User
 	err := m.DB.Get(&user, query, email)

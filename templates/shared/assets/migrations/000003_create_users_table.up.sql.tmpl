@@ -3,14 +3,16 @@ CREATE TABLE IF NOT EXISTS users (
 	id INTEGER PRIMARY KEY AUTOINCREMENT,
 	created TIMESTAMP NOT NULL,
 	email TEXT NOT NULL COLLATE NOCASE UNIQUE,
-	hashed_password VARBINARY(60) NOT NULL
+	hashed_password VARBINARY(60) NOT NULL,
+	activated BOOLEAN NOT NULL DEFAULT FALSE
 );
 {{- else if eq .Dialect "postgres"}}
 CREATE TABLE IF NOT EXISTS users (
 	id BIGSERIAL PRIMARY KEY,
 	created TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	email TEXT NOT NULL,
-	hashed_password BYTEA NOT NULL
+	hashed_password BYTEA NOT NULL,
+	activated BOOLEAN NOT NULL DEFAULT FALSE
 );
 
 -- Enforce email uniqueness case-insensitively.
@@ -21,6 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
 	created DATETIME(6) NOT NULL,
 	email VARCHAR(255) NOT NULL,
 	hashed_password VARBINARY(72) NOT NULL,
+	activated BOOLEAN NOT NULL DEFAULT FALSE,
 	UNIQUE KEY users_email_unique (email)
 );
 {{- end}}

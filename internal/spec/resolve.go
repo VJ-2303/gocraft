@@ -275,10 +275,6 @@ func (s ProjectSpec) requires(r *ResolvedSpec) []RequireLine {
 		add("golang.org/x/crypto")
 	}
 
-	if s.AccountsJWT {
-		add("github.com/golang-jwt/jwt/v5")
-	}
-
 	if r.NeedsMailer {
 		add("github.com/wneessen/go-mail")
 	}
