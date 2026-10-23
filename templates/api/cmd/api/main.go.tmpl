@@ -68,6 +68,9 @@ func run() error {
 	flag.StringVar(&cfg.basicAuthUsername, "basic-auth-username", "admin", "basic auth username")
 	flag.StringVar(&cfg.basicAuthPassword, "basic-auth-password", "password", "basic auth password")
 {{- end}}
+{{- if .SecureCookies}}
+	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for cookie encryption")
+{{- end}}
 	flag.Parse()
 {{- else}}
 	// Read the configuration settings for the application from
@@ -87,6 +90,9 @@ func run() error {
 {{- if .BasicAuth}}
 		basicAuthUsername: env.GetString("BASIC_AUTH_USERNAME", "admin"),
 		basicAuthPassword: env.GetString("BASIC_AUTH_PASSWORD", "password"),
+{{- end}}
+{{- if .SecureCookies}}
+		cookieSecretKey:   env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
 {{- end}}
 	}
 {{- end}}
@@ -113,7 +119,7 @@ func run() error {
 	logger.Info("database connection pool established", "dsn", cfg.dbDSN)
 {{- if .Migrations}}
 	if cfg.dbAutomigrate {
-		if err := database.MigrateUp(db, assets.MigrationFiles); err != nil {
+		if err := database.MigrateUp(db, assets.Migrations); err != nil {
 			return fmt.Errorf("running migrations: %w", err)
 		}
 		logger.Info("database migrations applied")
@@ -202,6 +208,9 @@ type config struct {
 {{- if .BasicAuth}}
 	basicAuthUsername string
 	basicAuthPassword string
+{{- end}}
+{{- if .SecureCookies}}
+	cookieSecretKey string
 {{- end}}
 }
 

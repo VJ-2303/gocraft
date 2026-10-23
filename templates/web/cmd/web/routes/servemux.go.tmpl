@@ -19,6 +19,9 @@ func (app *application) routes() http.Handler {
 
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
+{{- if .Sessions}}
+	handler = app.sessionManager.LoadAndSave(handler)
+{{- end}}
 {{- if .BasicAuth}}
 	handler = app.basicAuth(handler)
 {{- end}}

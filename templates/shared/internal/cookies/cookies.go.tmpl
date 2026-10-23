@@ -1,0 +1,108 @@
+// Package cookies provides helpers for encrypting and decrypting the
+// values of cookies, so that their contents cannot be read or tampered
+// with by the client.
+package cookies
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+)
+
+// Encrypt encrypts and authenticates plaintext cookie data using AES-GCM
+// with a base64-encoded 32-byte secret key, returning the value to store
+// in the cookie.
+func Encrypt(plaintext []byte, key string) (string, error) {
+	block, err := newBlock(key)
+	if err != nil {
+		return "", err
+	}
+
+	ciphertext, err := gcmSeal(block, plaintext)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+// Decrypt decrypts and verifies an encrypted cookie value, using a
+// base64-encoded 32-byte secret key. It returns an error if the value
+// cannot be decrypted or has been tampered with.
+func Decrypt(ciphertext string, key string) ([]byte, error) {
+	block, err := newBlock(key)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := base64.StdEncoding.DecodeString(ciphertext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to base64-decode value: %w", err)
+	}
+
+	return gcmOpen(block, data)
+}
+
+// newBlock creates an AES cipher block from a base64-encoded 32-byte
+// secret key.
+func newBlock(key string) (cipher.Block, error) {
+	decoded, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to base64-decode secret key: %w", err)
+	}
+
+	if len(decoded) != 32 {
+		return nil, errors.New("secret key must be 32 bytes")
+	}
+
+	block, err := aes.NewCipher(decoded)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create cipher: %w", err)
+	}
+
+	return block, nil
+}
+
+// gcmSeal encrypts and authenticates plaintext using AES-GCM.
+func gcmSeal(block cipher.Block, plaintext []byte) ([]byte, error) {
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	nonce := make([]byte, aesgcm.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	return aesgcm.Seal(nonce, nonce, plaintext, nil), nil
+}
+
+// gcmOpen verifies and decrypts an AES-GCM sealed value.
+func gcmOpen(block cipher.Block, data []byte) ([]byte, error) {
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	if len(data) < aesgcm.NonceSize() {
+		return nil, errors.New("malformed value")
+	}
+
+	nonce := data[:aesgcm.NonceSize()]
+	ciphertext := data[aesgcm.NonceSize():]
+
+	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		if strings.Contains(err.Error(), "message authentication failed") {
+			return nil, errors.New("failed to decrypt value")
+		}
+		return nil, fmt.Errorf("failed to decrypt value: %w", err)
+	}
+
+	return plaintext, nil
+}

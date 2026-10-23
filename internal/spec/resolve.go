@@ -1,6 +1,8 @@
 package spec
 
 import (
+	crand "crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"math/rand/v2"
 	"path"
@@ -129,6 +131,11 @@ type ResolvedSpec struct {
 	// codebase to avoid cookie clashes between local apps.
 	SessionCookieName string
 
+	// CookieSecretKey is a random base64-encoded 32-byte key used by the
+	// secure cookies helpers, generated per codebase for development.
+	// Documented for replacement in production.
+	CookieSecretKey string
+
 	// Requires lists the module requirements (path + version) implied by
 	// the selected options, for go.mod.
 	Requires []RequireLine
@@ -181,6 +188,7 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 		NeedsMailer:       s.Emails || s.ErrorNotifications || s.AccountsFull || s.AccountsJWT,
 		Port:              1000 + rand.IntN(9000),
 		SessionCookieName: "session_" + randomSuffix(8),
+		CookieSecretKey:   base64Key(),
 	}
 
 	r.NeedsDB = r.UseDB || s.Sessions || s.AccountsFull || s.AccountsJWT
@@ -309,6 +317,16 @@ func randomSuffix(n int) string {
 		b[i] = alphabet[rand.IntN(len(alphabet))]
 	}
 	return string(b)
+}
+
+// base64Key returns a random base64-encoded 32-byte key, suitable as a
+// cookie encryption secret for development.
+func base64Key() string {
+	key := make([]byte, 32)
+	if _, err := crand.Read(key); err != nil {
+		panic(fmt.Sprintf("generating cookie secret key: %v", err))
+	}
+	return base64.StdEncoding.EncodeToString(key)
 }
 
 // String returns a compact one-line summary of the spec, useful for logs.

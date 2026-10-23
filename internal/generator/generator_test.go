@@ -43,6 +43,17 @@ func TestGateGenerate(t *testing.T) {
 			s.Migrations = true
 			return s
 		}(),
+		// Exercises sessions, secure cookies and git integration.
+		"sessionapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.Database = spec.DBSQLite
+			s.Migrations = true
+			s.Sessions = true
+			s.SecureCookies = true
+			s.GitIntegration = true
+			s.Router = spec.RouterGorilla
+			return s
+		}(),
 		// Exercises a third-party router end to end.
 		"chiapp": func() spec.ProjectSpec {
 			s := testSpec()
@@ -413,7 +424,7 @@ func TestGenerateSQLiteAppWithMigrations(t *testing.T) {
 		`"db-dsn"`,
 		`"db-automigrate"`,
 		"database.New(",
-		"database.MigrateUp(db, assets.MigrationFiles)",
+		"database.MigrateUp(db, assets.Migrations)",
 		"db:        db,",
 	} {
 		if !strings.Contains(string(main), want) {
@@ -649,5 +660,73 @@ func TestGenerateEnvConfigAndLogVariants(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGenerateSessionsAndCookies(t *testing.T) {
+	s := testSpec()
+	s.Database = spec.DBSQLite
+	s.Migrations = true
+	s.Sessions = true
+	s.SecureCookies = true
+	rsp := resolveFor(t, s)
+
+	target := filepath.Join(t.TempDir(), "example")
+	result, err := Generate(rsp, target, slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	for _, want := range []string{
+		"assets/migrations/000002_create_sessions_table.up.sql",
+		"internal/cookies/cookies.go",
+	} {
+		if !contains(result.Files, want) {
+			t.Errorf("want generated file %s, got %v", want, result.Files)
+		}
+	}
+
+	main, err := os.ReadFile(filepath.Join(target, "cmd/web/main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"github.com/alexedwards/scs/sqlite3store"`,
+		"sessionManager.Store = sqlite3store.New(db.DB)",
+		"sessionManager.Cookie.Secure = true",
+		`"session-cookie-name"`,
+		`"cookie-secret-key"`,
+	} {
+		if !strings.Contains(string(main), want) {
+			t.Errorf("cmd/web/main.go want substring %q", want)
+		}
+	}
+
+	routes, err := os.ReadFile(filepath.Join(target, "cmd/web/routes.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(routes), "app.sessionManager.LoadAndSave(handler)") {
+		t.Error("routes.go want session LoadAndSave middleware")
+	}
+
+	// The sessions migration must contain the SQLite session table.
+	mig, err := os.ReadFile(filepath.Join(target, "assets/migrations/000002_create_sessions_table.up.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(mig), "CREATE TABLE IF NOT EXISTS sessions") {
+		t.Errorf("sessions migration want CREATE TABLE, got:\n%s", mig)
+	}
+
+	// Secure cookies helpers must not appear in apps without the option.
+	s2 := testSpec()
+	rsp2 := resolveFor(t, s2)
+	result2, err := Generate(rsp2, filepath.Join(t.TempDir(), "example2"), slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+	if contains(result2.Files, "internal/cookies/cookies.go") {
+		t.Error("cookies helpers generated without secure cookies option")
 	}
 }

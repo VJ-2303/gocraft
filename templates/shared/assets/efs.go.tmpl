@@ -3,7 +3,7 @@ package assets
 
 import (
 	"embed"
-{{- if eq .AppType "web"}}
+{{- if or (eq .AppType "web") .Migrations}}
 	"io/fs"
 {{- end}}
 )
@@ -20,13 +20,16 @@ var HTML = mustSub(FS, "html")
 {{end}}
 {{if .Migrations}}
 
-// MigrationFiles holds the embedded SQL migrations, rooted at the
-// migrations directory.
+// MigrationFiles holds the embedded SQL migrations.
 //
 //go:embed migrations
 var MigrationFiles embed.FS
+
+// Migrations holds the embedded SQL migrations, rooted at the migrations
+// directory.
+var Migrations = mustSub(MigrationFiles, "migrations")
 {{end}}
-{{if eq .AppType "web"}}
+{{if or (eq .AppType "web") .Migrations}}
 
 func mustSub(fsys fs.FS, dir string) fs.FS {
 	sub, err := fs.Sub(fsys, dir)
