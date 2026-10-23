@@ -1,15 +1,18 @@
 {{define "title"}}{{.Status}} {{.StatusText}}{{end}}
 
 {{define "content"}}
-<h1>{{.Status}} — {{.StatusText}}</h1>
-<p>{{.Message}}</p>
-{{if eq .Status 404}}
-<p>The page you are looking for may have been moved or deleted. Head back
+<h1>{{.Status}} {{.StatusText}}</h1>
+{{if eq .Status 400}}
+<p>The request could not be understood by the server. Check the input
+and try again, or return to the <a href="/">home page</a>.</p>
+{{else if eq .Status 404}}
+<p>The page you are looking for may have been moved or deleted. Return
 to the <a href="/">home page</a>.</p>
 {{else if eq .Status 500}}
-<p>The problem has been logged{{if .ErrorNotifications}} and our team has
-been notified{{end}}. Please try again in a few moments.</p>
+<p>Something went wrong while processing the request. The error has been
+logged{{if .ErrorNotifications}} and the administrator has been
+notified{{end}}. Please try again shortly.</p>
 {{else}}
-<p>Please try again, or head back to the <a href="/">home page</a>.</p>
+<p>{{.StatusText}}. Return to the <a href="/">home page</a>.</p>
 {{end}}
 {{end}}

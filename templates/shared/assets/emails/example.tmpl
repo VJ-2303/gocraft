@@ -1,19 +1,19 @@
-{{define "subject"}}An example email{{end}}
+{{/* An example email. Duplicate this file, define subject, plainBody and
+     an optional htmlBody block, and send it with:
+
+         app.mailer.Send(to, data, "your-template.tmpl")
+
+     Template data comes from app.defaultEmailData() plus whatever the
+     caller adds. */}}
+{{define "subject"}}Welcome to My Application{{end}}
 
 {{define "plainBody"}}
 Hello,
 
-This is an example email from your application, sent to {{.To}}.
-
-Send emails with:
-
-    app.mailer.Send("alice@example.com", data, "example.tmpl")
-
-Each email template defines subject and plainBody blocks, and an optional
-htmlBody block like this one.
+Thanks for signing up. Your account is ready to use.
 {{end}}
 
 {{define "htmlBody"}}
 <p>Hello,</p>
-<p>This is an example email from your application.</p>
+<p>Thanks for signing up. Your account is ready to use.</p>
 {{end}}

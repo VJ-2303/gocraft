@@ -1,21 +1,23 @@
-{{define "subject"}}{{.Error}}{{end}}
+{{define "subject"}}[{{.BaseURL}}] Runtime error: {{.Error}}{{end}}
 
 {{define "plainBody"}}
-A runtime error occurred.
+A runtime error occurred at {{.BaseURL}}.
 
 Method: {{.Method}}
 URI: {{.URI}}
 Error: {{.Error}}
 
-Trace:
+Stack trace:
 
 {{.Trace}}
 {{end}}
 
 {{define "htmlBody"}}
-<p>A runtime error occurred.</p>
-<p>Method: {{.Method}}<br>
+<p>A runtime error occurred at {{.BaseURL}}.</p>
+<p>
+Method: {{.Method}}<br>
 URI: {{.URI}}<br>
-Error: {{.Error}}</p>
+Error: {{.Error}}
+</p>
 <pre>{{.Trace}}</pre>
 {{end}}

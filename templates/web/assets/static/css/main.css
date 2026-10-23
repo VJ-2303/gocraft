@@ -1,13 +1,14 @@
-/* Base styles for the application. Edit freely — this is your code. */
+/* Styles for the application. Edit freely — this is your code. */
 
 :root {
-	--color-primary: #093774;
-	--color-success: #075821;
-	--color-error: #8f242c;
-	--color-base: #1f1f1f;
-	--color-muted: #5f5f5f;
-	--color-border: #d8dde1;
-	--color-box: #f5f6f7;
+	--color-primary: #25476a;
+	--color-primary-dark: #1b3450;
+	--color-text: #222222;
+	--color-muted: #6b6b6b;
+	--color-error: #a4262c;
+	--color-border: #c9cfd6;
+	--color-background: #ffffff;
+	--color-background-alt: #f4f6f8;
 }
 
 *,
@@ -16,47 +17,146 @@
 	box-sizing: border-box;
 }
 
-body {
-	margin: 0;
-	font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-	font-size: 1rem;
-	line-height: 1.5;
-	color: var(--color-base);
-	background-color: #ffffff;
+html {
+	font-size: 100%;
 }
 
+body {
+	margin: 0;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+	line-height: 1.6;
+	color: var(--color-text);
+	background-color: var(--color-background);
+}
+
+a {
+	color: var(--color-primary);
+}
+
+a:hover {
+	color: var(--color-primary-dark);
+}
+
+/* Page header and navigation */
+
 header {
-	border-bottom: 1px solid var(--color-border);
-	padding: 0.75rem 1.5rem;
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
+	background-color: var(--color-primary);
+	color: #ffffff;
+	padding: 0.625rem 1.25rem;
+}
+
+header .site-title {
+	color: #ffffff;
+	font-size: 1.125rem;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+nav {
+	display: inline;
+	margin-left: 1.5rem;
 }
 
 nav a {
-	color: var(--color-primary);
-	text-decoration: none;
+	color: #ffffff;
 	margin-right: 1rem;
+	text-decoration: none;
 }
 
 nav a:hover {
 	text-decoration: underline;
 }
 
+nav .current-user {
+	margin-right: 0.75rem;
+}
+
+nav form {
+	display: inline;
+}
+
+/* Main content area */
+
 main {
-	max-width: 50rem;
+	max-width: 40rem;
 	margin: 0 auto;
-	padding: 2rem 1.5rem;
+	padding: 2rem 1.25rem 3rem;
 }
 
 h1 {
-	font-size: 1.75rem;
-	margin-top: 0;
+	font-size: 1.5rem;
+	font-weight: 600;
+	margin: 0 0 1rem;
 }
+
+p {
+	margin: 0 0 1rem;
+}
+
+/* Forms */
+
+form {
+	margin: 0 0 1.5rem;
+}
+
+label {
+	display: block;
+	font-weight: 600;
+	margin-bottom: 0.25rem;
+}
+
+input[type="email"],
+input[type="password"],
+input[type="text"] {
+	display: block;
+	width: 100%;
+	padding: 0.5rem 0.625rem;
+	font: inherit;
+	color: inherit;
+	border: 1px solid var(--color-border);
+	border-radius: 2px;
+	background-color: var(--color-background);
+}
+
+input:focus {
+	outline: 2px solid var(--color-primary);
+	outline-offset: 0;
+	border-color: var(--color-primary);
+}
+
+button {
+	font: inherit;
+	padding: 0.5rem 1.25rem;
+	border: 0;
+	border-radius: 2px;
+	background-color: var(--color-primary);
+	color: #ffffff;
+	cursor: pointer;
+}
+
+button:hover {
+	background-color: var(--color-primary-dark);
+}
+
+/* Form messages */
+
+.hint {
+	color: var(--color-muted);
+	font-size: 0.875rem;
+	margin: -0.5rem 0 1rem;
+}
+
+.error {
+	color: var(--color-error);
+	margin: -0.5rem 0 1rem;
+}
+
+/* Footer */
 
 footer {
 	border-top: 1px solid var(--color-border);
 	color: var(--color-muted);
 	font-size: 0.875rem;
-	padding: 0.75rem 1.5rem;
+	padding: 0.75rem 1.25rem;
+	text-align: center;
 }

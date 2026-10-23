@@ -9,14 +9,14 @@
 </head>
 <body>
 	<header>
-		<strong>My Application</strong>
+		<a class="site-title" href="/">My Application</a>
 		{{template "nav" .}}
 	</header>
 	<main>
 		{{template "content" .}}
 	</main>
 	<footer>
-		<p>Powered by <a href="https://go.dev">Go</a> &middot; {{year}}</p>
+		<p>&copy; {{year}} My Application</p>
 	</footer>
 </body>
 </html>

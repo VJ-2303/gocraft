@@ -2,8 +2,8 @@
 <nav>
 	<a href="/">Home</a>
 	{{if .AuthenticatedUser}}
-		<span>{{.AuthenticatedUser.Email}}</span>
-		<form action="/logout" method="POST" style="display: inline">
+		<span class="current-user">{{.AuthenticatedUser.Email}}</span>
+		<form action="/logout" method="POST">
 			<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
 			<button type="submit">Log out</button>
 		</form>

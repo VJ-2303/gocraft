@@ -13,10 +13,10 @@
 	<label for="password">Password</label>
 	<input type="password" id="password" name="password">
 	{{with .Form.FieldErrors.password}}<p class="error">{{.}}</p>{{end}}
-	<p class="hint">At least 8 characters, at most 72, and not a common password.</p>
+	<p class="hint">Must be at least 8 characters long.</p>
 
 	<button type="submit">Sign up</button>
 </form>
 
-<p>Already have an account? <a href="/login">Log in</a>.</p>
+<p>Already have an account? <a href="/login">Log in</a></p>
 {{end}}
