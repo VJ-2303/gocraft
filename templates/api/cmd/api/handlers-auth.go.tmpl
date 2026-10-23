@@ -5,7 +5,6 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -95,7 +94,7 @@ func (app *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	headers := make(http.Header)
 	headers.Set("Location", "/v1/users")
 
-	err = response.WriteJSON(w, http.StatusAccepted, envelope{"user": envelope{"id": id, "email": input.Email}}, headers)
+	err = response.JSONWithHeaders(w, http.StatusAccepted, envelope{"user": envelope{"id": id, "email": input.Email}}, headers)
 	if err != nil {
 		app.serverError(w, r, err)
 	}
@@ -150,7 +149,7 @@ func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = response.WriteJSON(w, http.StatusOK, envelope{"message": "your account has been successfully activated"}, nil)
+	err = response.JSON(w, http.StatusOK, envelope{"message": "your account has been successfully activated"})
 	if err != nil {
 		app.serverError(w, r, err)
 	}
@@ -208,7 +207,7 @@ func (app *application) createAuthenticationToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	err = response.WriteJSON(w, http.StatusCreated, envelope{"authentication_token": token}, nil)
+	err = response.JSON(w, http.StatusCreated, envelope{"authentication_token": token})
 	if err != nil {
 		app.serverError(w, r, err)
 	}
@@ -218,34 +217,13 @@ func (app *application) createAuthenticationToken(w http.ResponseWriter, r *http
 func (app *application) whoami(w http.ResponseWriter, r *http.Request) {
 	user, _ := contextGetAuthenticatedUser(r)
 
-	err := response.WriteJSON(w, http.StatusOK, envelope{
+	err := response.JSON(w, http.StatusOK, envelope{
 		"user": envelope{
 			"id":        user.ID,
 			"email":     user.Email,
 			"activated": user.Activated,
 		},
-	}, nil)
-	if err != nil {
-		app.serverError(w, r, err)
-	}
-}
-
-// badRequest writes a 400 response for a malformed request body.
-func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
-	var badRequest *response.BadRequestError
-	if errors.As(err, &badRequest) {
-		err = response.WriteJSON(w, http.StatusBadRequest, envelope{"error": badRequest.Message}, nil)
-		if err != nil {
-			app.serverError(w, r, err)
-		}
-		return
-	}
-	app.serverError(w, r, err)
-}
-
-// failedValidation writes a 422 response carrying the field errors.
-func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, v validator.Validator) {
-	err := response.WriteJSON(w, http.StatusUnprocessableEntity, envelope{"error": v.FieldErrors}, nil)
+	})
 	if err != nil {
 		app.serverError(w, r, err)
 	}
@@ -254,7 +232,7 @@ func (app *application) failedValidation(w http.ResponseWriter, r *http.Request,
 // invalidCredentials writes a generic 401 response.
 func (app *application) invalidCredentials(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("WWW-Authenticate", `Bearer realm="restricted", charset="UTF-8"`)
-	err := response.WriteJSON(w, http.StatusUnauthorized, envelope{"error": "invalid email or password"}, nil)
+	err := response.JSON(w, http.StatusUnauthorized, envelope{"Error": "invalid email or password"})
 	if err != nil {
 		app.serverError(w, r, err)
 	}

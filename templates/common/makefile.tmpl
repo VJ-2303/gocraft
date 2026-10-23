@@ -32,9 +32,9 @@ test/cover:
 	go tool cover -html=/tmp/coverage.out -o /tmp/coverage.html
 	go tool cover -func=/tmp/coverage.out
 
-## upgradeable: List direct module dependencies that have upgrades available and optionally update them.
+## upgradeable: Interactively update direct module dependencies that have upgrades available.
 upgradeable:
-	go list -u -m -f '{{"{{if and (not .Indirect) .Update}}{{.Path}}: {{.Version}} -> {{.Update.Version}}{{end}}"}}' all
+	go run github.com/oligot/go-mod-upgrade@latest
 
 ## tidy: Run go mod tidy -v, apply go fix, and format all Go files with go fmt.
 tidy:

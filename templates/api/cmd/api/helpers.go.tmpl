@@ -3,46 +3,11 @@ package main
 
 import (
 	"fmt"
-	"net/http"
-	"runtime/debug"
-
-	"{{.ModulePath}}/internal/response"
 )
 
 // envelope is the type used to wrap JSON response payloads.
 type envelope map[string]any
-
-// serverError logs an error, optionally emails an error notification to
-// the administrator, and sends a 500 Internal Server Error response to
-// the client.
-func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
-	method := r.Method
-	uri := r.URL.RequestURI()
-	trace := string(debug.Stack())
-
-	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
-
-{{- if .ErrorNotifications}}
-	app.backgroundTask(func() error {
-		data := app.defaultEmailData()
-		data["Method"] = method
-		data["URI"] = uri
-		data["Trace"] = trace
-		data["Error"] = err.Error()
-
-		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
-	})
-{{- end}}
-
-	message := "the server encountered a problem and could not process your request"
-	err = response.WriteJSON(w, http.StatusInternalServerError, envelope{"error": message}, nil)
-	if err != nil {
-		app.logger.Error(err.Error(), "method", method, "uri", uri)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
-
-{{- if .NeedsMailer}}
+{{if .NeedsMailer}}
 
 // defaultEmailData returns a map with common data shared by all email
 // templates. Additional template-specific data can be added to the map by
@@ -52,17 +17,7 @@ func (app *application) defaultEmailData() envelope {
 		"BaseURL": app.config.baseURL,
 	}
 }
-{{- end}}
-
-// clientError sends a specific status code and JSON error message to the
-// client.
-func (app *application) clientError(w http.ResponseWriter, status int) {
-	message := http.StatusText(status)
-	err := response.WriteJSON(w, status, envelope{"error": message}, nil)
-	if err != nil {
-		w.WriteHeader(status)
-	}
-}
+{{end}}
 
 // backgroundTask runs fn in a background goroutine, automatically
 // recovering from any panics and reporting any returned errors. The API

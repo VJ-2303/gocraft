@@ -1,108 +1,182 @@
-// Package cookies provides helpers for encrypting and decrypting the
-// values of cookies, so that their contents cannot be read or tampered
-// with by the client.
+// Package cookies provides helpers for reading and writing cookie
+// values, with optional HMAC-SHA256 signing (tamper-proof) or AES-GCM
+// encryption (tamper-proof and confidential).
 package cookies
 
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
-	"fmt"
+	"io"
+	"net/http"
 	"strings"
 )
 
-// Encrypt encrypts and authenticates plaintext cookie data using AES-GCM
-// with a base64-encoded 32-byte secret key, returning the value to store
-// in the cookie.
-func Encrypt(plaintext []byte, key string) (string, error) {
-	block, err := newBlock(key)
+// ErrInvalidValue is returned when a cookie value cannot be read,
+// verified or decrypted.
+var ErrInvalidValue = errors.New("invalid value")
+
+// Write adds a cookie to the response, base64-encoding its value. Cookie
+// values are limited to 4096 bytes.
+func Write(w http.ResponseWriter, cookie http.Cookie) error {
+	cookie.Value = base64.StdEncoding.EncodeToString([]byte(cookie.Value))
+
+	if len(cookie.Value) > 4096 {
+		return errors.New("cookie value must not be longer than 4096 bytes")
+	}
+
+	http.SetCookie(w, &cookie)
+	return nil
+}
+
+// Read retrieves a cookie by name and base64-decodes its value. It
+// returns http.ErrNoCookie when the cookie is missing, and
+// ErrInvalidValue when the value cannot be decoded.
+func Read(r *http.Request, name string) (string, error) {
+	cookie, err := r.Cookie(name)
 	if err != nil {
 		return "", err
 	}
 
-	ciphertext, err := gcmSeal(block, plaintext)
+	value, err := base64.StdEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	return string(value), nil
+}
+
+// WriteSigned adds a cookie to the response with an HMAC-SHA256
+// signature appended to its value, so tampering is detectable. The
+// secret key must be 32 characters.
+func WriteSigned(w http.ResponseWriter, cookie http.Cookie, secretKey string) error {
+	cookie.Value = base64.StdEncoding.EncodeToString([]byte(cookie.Value))
+
+	if len(cookie.Value) > 4096 {
+		return errors.New("cookie value must not be longer than 4096 bytes")
+	}
+
+	mac := hmac.New(sha256.New, []byte(secretKey))
+	mac.Write([]byte(cookie.Name))
+	mac.Write([]byte(cookie.Value))
+	signature := mac.Sum(nil)
+
+	cookie.Value = cookie.Value + "|" + base64.StdEncoding.EncodeToString(signature)
+
+	http.SetCookie(w, &cookie)
+	return nil
+}
+
+// ReadSigned retrieves a cookie by name and verifies its HMAC-SHA256
+// signature. It returns ErrInvalidValue when the value has been tampered
+// with.
+func ReadSigned(r *http.Request, name string, secretKey string) (string, error) {
+	cookie, err := r.Cookie(name)
 	if err != nil {
 		return "", err
 	}
 
-	return base64.StdEncoding.EncodeToString(ciphertext), nil
+	value, signature, found := strings.Cut(cookie.Value, "|")
+	if !found {
+		return "", ErrInvalidValue
+	}
+
+	expected, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	mac := hmac.New(sha256.New, []byte(secretKey))
+	mac.Write([]byte(cookie.Name))
+	mac.Write([]byte(value))
+	if !hmac.Equal(mac.Sum(nil), expected) {
+		return "", ErrInvalidValue
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	return string(decoded), nil
 }
 
-// Decrypt decrypts and verifies an encrypted cookie value, using a
-// base64-encoded 32-byte secret key. It returns an error if the value
-// cannot be decrypted or has been tampered with.
-func Decrypt(ciphertext string, key string) ([]byte, error) {
-	block, err := newBlock(key)
+// WriteEncrypted adds a cookie to the response with an AES-GCM
+// encrypted value, so its contents are confidential and tamper-proof.
+// The secret key must be 32 characters.
+func WriteEncrypted(w http.ResponseWriter, cookie http.Cookie, secretKey string) error {
+	block, err := aes.NewCipher([]byte(secretKey))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	data, err := base64.StdEncoding.DecodeString(ciphertext)
-	if err != nil {
-		return nil, fmt.Errorf("failed to base64-decode value: %w", err)
-	}
-
-	return gcmOpen(block, data)
-}
-
-// newBlock creates an AES cipher block from a base64-encoded 32-byte
-// secret key.
-func newBlock(key string) (cipher.Block, error) {
-	decoded, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to base64-decode secret key: %w", err)
-	}
-
-	if len(decoded) != 32 {
-		return nil, errors.New("secret key must be 32 bytes")
-	}
-
-	block, err := aes.NewCipher(decoded)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	return block, nil
-}
-
-// gcmSeal encrypts and authenticates plaintext using AES-GCM.
-func gcmSeal(block cipher.Block, plaintext []byte) ([]byte, error) {
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCM: %w", err)
+		return err
 	}
 
 	nonce := make([]byte, aesgcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return err
 	}
 
-	return aesgcm.Seal(nonce, nonce, plaintext, nil), nil
+	plaintext := base64.StdEncoding.EncodeToString([]byte(cookie.Value))
+	ciphertext := aesgcm.Seal(nonce, nonce, []byte(plaintext), nil)
+
+	cookie.Value = base64.StdEncoding.EncodeToString(ciphertext)
+
+	if len(cookie.Value) > 4096 {
+		return errors.New("cookie value must not be longer than 4096 bytes")
+	}
+
+	http.SetCookie(w, &cookie)
+	return nil
 }
 
-// gcmOpen verifies and decrypts an AES-GCM sealed value.
-func gcmOpen(block cipher.Block, data []byte) ([]byte, error) {
+// ReadEncrypted retrieves a cookie by name and decrypts its AES-GCM
+// value. It returns ErrInvalidValue when the value cannot be decrypted
+// or has been tampered with.
+func ReadEncrypted(r *http.Request, name string, secretKey string) (string, error) {
+	cookie, err := r.Cookie(name)
+	if err != nil {
+		return "", err
+	}
+
+	ciphertext, err := base64.StdEncoding.DecodeString(cookie.Value)
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	block, err := aes.NewCipher([]byte(secretKey))
+	if err != nil {
+		return "", err
+	}
+
 	aesgcm, err := cipher.NewGCM(block)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create GCM: %w", err)
+		return "", err
 	}
 
-	if len(data) < aesgcm.NonceSize() {
-		return nil, errors.New("malformed value")
+	if len(ciphertext) < aesgcm.NonceSize() {
+		return "", ErrInvalidValue
 	}
 
-	nonce := data[:aesgcm.NonceSize()]
-	ciphertext := data[aesgcm.NonceSize():]
+	nonce := ciphertext[:aesgcm.NonceSize()]
+	sealed := ciphertext[aesgcm.NonceSize():]
 
-	plaintext, err := aesgcm.Open(nil, nonce, ciphertext, nil)
+	plaintext, err := aesgcm.Open(nil, nonce, sealed, nil)
 	if err != nil {
-		if strings.Contains(err.Error(), "message authentication failed") {
-			return nil, errors.New("failed to decrypt value")
-		}
-		return nil, fmt.Errorf("failed to decrypt value: %w", err)
+		return "", ErrInvalidValue
 	}
 
-	return plaintext, nil
+	decoded, err := base64.StdEncoding.DecodeString(string(plaintext))
+	if err != nil {
+		return "", ErrInvalidValue
+	}
+
+	return string(decoded), nil
 }

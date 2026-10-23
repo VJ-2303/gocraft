@@ -33,6 +33,7 @@ import (
 
 {{- end}}
 {{- if .NeedsMailer}}
+	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/mailer"
 
 {{- end}}
@@ -84,10 +85,10 @@ func run() error {
 	flag.StringVar(&cfg.basicAuthPassword, "basic-auth-password", "password", "basic auth password")
 {{- end}}
 {{- if .SecureCookies}}
-	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for cookie encryption")
+	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "32-character secret key for cookie signing and encryption")
 {{- end}}
 {{- if .AccountsJWT}}
-	flag.StringVar(&cfg.jwtSecret, "jwt-secret", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for signing authentication tokens")
+	flag.StringVar(&cfg.jwtSecret, "jwt-secret", "{{.CookieSecretKey}}", "32-character secret key for signing authentication tokens")
 {{- end}}
 {{- if .NeedsMailer}}
 	flag.StringVar(&cfg.smtpHost, "smtp-host", "localhost", "SMTP server host")
@@ -175,7 +176,7 @@ func run() error {
 
 	// Initialize the mailer with the embedded email templates and the
 	// configured SMTP settings.
-	mailer, err := mailer.New(logger, assets.EmailFiles, cfg.smtpHost, cfg.smtpPort, cfg.smtpUsername, cfg.smtpPassword, cfg.smtpFrom)
+	mailer, err := mailer.New(logger, assets.EmailFiles, funcs.All(), cfg.smtpHost, cfg.smtpPort, cfg.smtpUsername, cfg.smtpPassword, cfg.smtpFrom)
 	if err != nil {
 		return fmt.Errorf("initializing mailer: %w", err)
 	}
@@ -246,12 +247,11 @@ func run() error {
 
 		logger.Info("shutting down server")
 
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
 		// Call Shutdown() on the server with a context, which will do a
 		// graceful shutdown without interrupting any active connections.
-		shutdownError <- srv.Shutdown(ctx)
+		// There is no timeout: shutdown completes when the last active
+		// connection finishes.
+		shutdownError <- srv.Shutdown(context.Background())
 	}()
 
 	logger.Info("starting server", "addr", srv.Addr)

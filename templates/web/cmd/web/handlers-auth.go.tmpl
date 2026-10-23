@@ -17,9 +17,9 @@ import (
 // credentialsForm holds the email and password submitted through the
 // signup, login and password reset forms.
 type credentialsForm struct {
-	Email                string `schema:"email"`
-	Password             string `schema:"password"`
-	validator.Validator  `schema:"-"`
+	Email               string `form:"email"`
+	Password            string `form:"password"`
+	validator.Validator `form:"-"`
 }
 
 // validate checks the form fields against the password policy: 8 to 72
@@ -54,9 +54,9 @@ func (app *application) signup(w http.ResponseWriter, r *http.Request) {
 func (app *application) signupSubmit(w http.ResponseWriter, r *http.Request) {
 	var form credentialsForm
 
-	err := request.DecodePostForm(r, &form)
+	err := request.DecodePostForm(w, r, &form)
 	if err != nil {
-		app.clientError(w, r, http.StatusBadRequest)
+		app.badRequest(w, r, err)
 		return
 	}
 
@@ -116,9 +116,9 @@ func (app *application) login(w http.ResponseWriter, r *http.Request) {
 func (app *application) loginSubmit(w http.ResponseWriter, r *http.Request) {
 	var form credentialsForm
 
-	err := request.DecodePostForm(r, &form)
+	err := request.DecodePostForm(w, r, &form)
 	if err != nil {
-		app.clientError(w, r, http.StatusBadRequest)
+		app.badRequest(w, r, err)
 		return
 	}
 
@@ -192,8 +192,8 @@ func (app *application) logout(w http.ResponseWriter, r *http.Request) {
 // emailForm holds an email address submitted through the forgotten
 // password form.
 type emailForm struct {
-	Email               string `schema:"email"`
-	validator.Validator `schema:"-"`
+	Email               string `form:"email"`
+	validator.Validator `form:"-"`
 }
 
 // forgottenPassword displays the email form for requesting a password
@@ -212,9 +212,9 @@ func (app *application) forgottenPassword(w http.ResponseWriter, r *http.Request
 func (app *application) forgottenPasswordSubmit(w http.ResponseWriter, r *http.Request) {
 	var form emailForm
 
-	err := request.DecodePostForm(r, &form)
+	err := request.DecodePostForm(w, r, &form)
 	if err != nil {
-		app.clientError(w, r, http.StatusBadRequest)
+		app.badRequest(w, r, err)
 		return
 	}
 
@@ -271,8 +271,8 @@ func (app *application) forgottenPasswordConfirmation(w http.ResponseWriter, r *
 // newPasswordForm holds the new password submitted through the password
 // reset form.
 type newPasswordForm struct {
-	NewPassword         string `schema:"newPassword"`
-	validator.Validator `schema:"-"`
+	NewPassword         string `form:"newPassword"`
+	validator.Validator `form:"-"`
 }
 
 // passwordReset validates the reset token from the emailed link and, if
@@ -314,7 +314,7 @@ func (app *application) passwordResetSubmit(w http.ResponseWriter, r *http.Reque
 
 	var form newPasswordForm
 
-	err = request.DecodePostForm(r, &form)
+	err = request.DecodePostForm(w, r, &form)
 	if err != nil {
 		app.clientError(w, r, http.StatusBadRequest)
 		return

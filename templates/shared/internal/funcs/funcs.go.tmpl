@@ -3,64 +3,202 @@
 package funcs
 
 import (
+	"fmt"
+	"html/template"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // All returns the template functions as a map, suitable for use with
 // template.FuncMap.
 func All() map[string]any {
 	return map[string]any{
-		"humanDate":   humanDate,
-		"year":        year,
-		"urlSetParam": urlSetParam,
-		"urlDelParam": urlDelParam,
+		"now":           now,
+		"timeSince":     timeSince,
+		"timeUntil":     timeUntil,
+		"formatTime":    formatTime,
+		"approxDuration": approxDuration,
+		"uppercase":     strings.ToUpper,
+		"lowercase":     strings.ToLower,
+		"pluralize":     pluralize,
+		"slugify":       slugify,
+		"safeHTML":      safeHTML,
+		"join":          strings.Join,
+		"incr":          incr,
+		"decr":          decr,
+		"formatInt":     formatInt,
+		"formatFloat":   formatFloat,
+		"yesNo":         yesNo,
+		"urlSetParam":   urlSetParam,
+		"urlDelParam":   urlDelParam,
+		"year":          year,
 	}
 }
 
-// humanDate returns a human-readable rendering of a time value, e.g.
-// "02 Jan 2006 at 15:04".
-func humanDate(t time.Time) string {
-	return t.UTC().Format("02 Jan 2006 at 15:04")
+// now returns the current time.
+func now() time.Time {
+	return time.Now()
+}
+
+// timeSince returns the elapsed time since t.
+func timeSince(t time.Time) time.Duration {
+	return time.Since(t)
+}
+
+// timeUntil returns the time until t.
+func timeUntil(t time.Time) time.Duration {
+	return time.Until(t)
+}
+
+// formatTime formats t using the given layout, e.g.
+// formatTime("2006-01-02", t).
+func formatTime(layout string, t time.Time) string {
+	return t.Format(layout)
+}
+
+// approxDuration returns a human-friendly approximation of d, such as
+// "3 minutes" or "2 weeks".
+func approxDuration(d time.Duration) string {
+	seconds := int(d.Seconds())
+	switch {
+	case seconds < 60:
+		return strconv.Itoa(seconds) + " seconds"
+	case seconds < 60*60:
+		return strconv.Itoa(seconds/60) + " minutes"
+	case seconds < 60*60*24:
+		return strconv.Itoa(seconds/60/60) + " hours"
+	case seconds < 60*60*24*7:
+		return strconv.Itoa(seconds/60/60/24) + " days"
+	case seconds < 60*60*24*30:
+		return strconv.Itoa(seconds/60/60/24/7) + " weeks"
+	case seconds < 60*60*24*365:
+		return strconv.Itoa(seconds/60/60/24/30) + " months"
+	default:
+		return strconv.Itoa(seconds/60/60/24/365) + " years"
+	}
+}
+
+// pluralize returns singular when count is 1, otherwise plural.
+func pluralize(count int, singular, plural string) string {
+	if count == 1 {
+		return singular
+	}
+	return plural
+}
+
+// slugify converts s to a URL-friendly slug: lowercased, with hyphens in
+// place of whitespace and anything that is not a letter or digit
+// removed.
+func slugify(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		case unicode.IsSpace(r) || r == '-' || r == '_':
+			b.WriteByte('-')
+		}
+	}
+
+	return strings.Trim(b.String(), "-")
+}
+
+// safeHTML marks s as safe HTML, so templates render it without
+// escaping. Use only with trusted input.
+func safeHTML(s string) template.HTML {
+	return template.HTML(s)
+}
+
+// incr adds 1 to i.
+func incr(i int64) int64 {
+	return i + 1
+}
+
+// decr subtracts 1 from i.
+func decr(i int64) int64 {
+	return i - 1
+}
+
+// formatInt formats i with comma thousands separators.
+func formatInt(i int64) string {
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+
+	digits := strconv.FormatInt(i, 10)
+	var parts []string
+	for len(digits) > 3 {
+		parts = append([]string{digits[len(digits)-3:]}, parts...)
+		digits = digits[:len(digits)-3]
+	}
+	parts = append([]string{digits}, parts...)
+
+	out := strings.Join(parts, ",")
+	if neg {
+		return "-" + out
+	}
+	return out
+}
+
+// formatFloat rounds f to the given number of decimals and formats it
+// with comma thousands separators.
+func formatFloat(f float64, decimals int) string {
+	out := strconv.FormatFloat(f, 'f', decimals, 64)
+
+	intPart, fracPart, found := strings.Cut(out, ".")
+	intPartFormatted := formatInt(mustAtoi64(intPart))
+
+	if !found {
+		return intPartFormatted
+	}
+	return intPartFormatted + "." + fracPart
+}
+
+// mustAtoi64 parses s as an int64, returning 0 on failure. It exists
+// only for formatFloat, whose input always comes from FormatFloat.
+func mustAtoi64(s string) int64 {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// yesNo renders a bool as "Yes" or "No".
+func yesNo(v bool) string {
+	if v {
+		return "Yes"
+	}
+	return "No"
+}
+
+// urlSetParam returns a copy of u with the given query parameter set to
+// value.
+func urlSetParam(u *url.URL, key string, value any) *url.URL {
+	copied := *u
+	query := u.Query()
+	query.Set(key, fmt.Sprint(value))
+	copied.RawQuery = query.Encode()
+	return &copied
+}
+
+// urlDelParam returns a copy of u with the given query parameter
+// removed.
+func urlDelParam(u *url.URL, key string) *url.URL {
+	copied := *u
+	query := u.Query()
+	query.Del(key)
+	copied.RawQuery = query.Encode()
+	return &copied
 }
 
 // year returns the current year as an integer.
 func year() int {
 	return time.Now().Year()
-}
-
-// urlSetParam returns a copy of u with the given query parameter set to
-// value, adding the parameter if it doesn't already exist.
-func urlSetParam(u string, key, value string) string {
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return u
-	}
-
-	query := parsed.Query()
-	query.Set(key, value)
-	parsed.RawQuery = query.Encode()
-
-	return parsed.String()
-}
-
-// urlDelParam returns a copy of u with the given query parameter removed.
-func urlDelParam(u string, key string) string {
-	parsed, err := url.Parse(u)
-	if err != nil {
-		return u
-	}
-
-	query := parsed.Query()
-	query.Del(key)
-	parsed.RawQuery = query.Encode()
-
-	return parsed.String()
-}
-
-// trimSuffix is a convenience wrapper for strings.TrimSuffix, useful in
-// templates for trimming trailing newlines or whitespace markers.
-func trimSuffix(s, suffix string) string {
-	return strings.TrimSuffix(s, suffix)
 }

@@ -25,8 +25,9 @@ type Mailer struct {
 }
 
 // New initializes a Mailer with an SMTP client and the parsed email
-// templates from emailFiles.
-func New(logger *slog.Logger, emailFiles fs.FS, host string, port int, username, password, sender string) (Mailer, error) {
+// templates from emailFiles. The funcs map is made available to every
+// email template, like HTML templates.
+func New(logger *slog.Logger, emailFiles fs.FS, funcs template.FuncMap, host string, port int, username, password, sender string) (Mailer, error) {
 	// Parse all email templates once at initialization.
 	templates := make(map[string]*template.Template)
 
@@ -38,7 +39,7 @@ func New(logger *slog.Logger, emailFiles fs.FS, host string, port int, username,
 	for _, page := range pages {
 		name := strings.TrimSuffix(page, ".tmpl")
 
-		tmpl, err := template.New(name).ParseFS(emailFiles, page)
+		tmpl, err := template.New(name).Funcs(funcs).ParseFS(emailFiles, page)
 		if err != nil {
 			return Mailer{}, fmt.Errorf("parsing email template %s: %w", page, err)
 		}

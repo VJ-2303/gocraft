@@ -842,18 +842,27 @@ func TestGeneratePlusFeatures(t *testing.T) {
 		t.Errorf("want error.tmpl in WebPages, got %v", rsp.WebPages)
 	}
 
-	helpers, err := os.ReadFile(filepath.Join(target, "cmd/web/helpers.go"))
+	errorsFile, err := os.ReadFile(filepath.Join(target, "cmd/web/errors.go"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"defaultEmailData",
+		"reportServerError",
 		`app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")`,
 		`app.render(w, r, status, "error.tmpl", data)`,
+		`errors.As(err, &badRequestErr)`,
 	} {
-		if !strings.Contains(string(helpers), want) {
-			t.Errorf("cmd/web/helpers.go want substring %q", want)
+		if !strings.Contains(string(errorsFile), want) {
+			t.Errorf("cmd/web/errors.go want substring %q", want)
 		}
+	}
+
+	helpers, err := os.ReadFile(filepath.Join(target, "cmd/web/helpers.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(helpers), "defaultEmailData") {
+		t.Error("cmd/web/helpers.go want defaultEmailData")
 	}
 }
 
