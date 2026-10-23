@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"fmt"
+
 	"github.com/vj/nomoreboiler/internal/spec"
 )
 
@@ -63,8 +65,11 @@ func appFiles(rsp spec.ResolvedSpec) []FileSpec {
 
 // webFiles returns the files for a traditional web application.
 func webFiles(rsp spec.ResolvedSpec) []FileSpec {
+	routes := fmt.Sprintf("web/cmd/web/routes/%s.go.tmpl", rsp.Router)
 	return []FileSpec{
 		{Template: "shared/internal/response/html.go.tmpl", OutPath: "internal/response/html.go", Cond: true},
+
+		{Template: routes, OutPath: "cmd/web/routes.go", Cond: true},
 
 		{Template: "web/assets/static/css/main.css", OutPath: "assets/static/css/main.css", Cond: true, Copy: true},
 		{Template: "web/assets/html/base.tmpl", OutPath: "assets/html/base.tmpl", Cond: true, Copy: true},
@@ -72,7 +77,6 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "web/assets/html/pages/home.tmpl", OutPath: "assets/html/pages/home.tmpl", Cond: true, Copy: true},
 
 		{Template: "web/cmd/web/main.go.tmpl", OutPath: "cmd/web/main.go", Cond: true},
-		{Template: "web/cmd/web/routes.go.tmpl", OutPath: "cmd/web/routes.go", Cond: true},
 		{Template: "web/cmd/web/handlers.go.tmpl", OutPath: "cmd/web/handlers.go", Cond: true},
 		{Template: "web/cmd/web/templates.go.tmpl", OutPath: "cmd/web/templates.go", Cond: true},
 		{Template: "web/cmd/web/helpers.go.tmpl", OutPath: "cmd/web/helpers.go", Cond: true},
@@ -81,9 +85,10 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 
 // apiFiles returns the files for a JSON API.
 func apiFiles(rsp spec.ResolvedSpec) []FileSpec {
+	routes := fmt.Sprintf("api/cmd/api/routes/%s.go.tmpl", rsp.Router)
 	return []FileSpec{
+		{Template: routes, OutPath: "cmd/api/routes.go", Cond: true},
 		{Template: "api/cmd/api/main.go.tmpl", OutPath: "cmd/api/main.go", Cond: true},
-		{Template: "api/cmd/api/routes.go.tmpl", OutPath: "cmd/api/routes.go", Cond: true},
 		{Template: "api/cmd/api/handlers.go.tmpl", OutPath: "cmd/api/handlers.go", Cond: true},
 		{Template: "api/cmd/api/helpers.go.tmpl", OutPath: "cmd/api/helpers.go", Cond: true},
 	}

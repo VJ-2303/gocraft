@@ -1,0 +1,18 @@
+// The API's route table: URL-to-handler mappings and middleware assignment.
+package main
+
+import (
+	"net/http"
+
+	"github.com/alexedwards/flow/v2"
+)
+
+// routes initializes the API's routes and middleware, and returns a
+// http.Handler ready to serve requests.
+func (app *application) routes() http.Handler {
+	mux := flow.New()
+
+	mux.HandleFunc(http.MethodGet, "/v1/healthcheck", app.healthcheck)
+
+	return mux
+}
