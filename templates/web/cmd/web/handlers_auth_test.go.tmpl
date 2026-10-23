@@ -1,0 +1,185 @@
+// Tests for the user account flows.
+package main
+
+import (
+	"net/http"
+	"net/url"
+	"regexp"
+	"testing"
+)
+
+// csrfTokenRX matches the hidden CSRF token input on rendered forms.
+var csrfTokenRX = regexp.MustCompile(`<input type="hidden" name="csrf_token" value="([^"]+)">`)
+
+func TestRequireAuthenticationRedirects(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, headers, _ := ts.get(t, "/restricted")
+	if status != http.StatusSeeOther {
+		t.Errorf("want status %d for anonymous /restricted, got %d", http.StatusSeeOther, status)
+	}
+	if got := headers.Get("Location"); got != "/login" {
+		t.Errorf("want redirect to /login, got %q", got)
+	}
+}
+
+func TestSignupFlow(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	// Render the form and extract the CSRF token.
+	status, _, body := ts.get(t, "/signup")
+	if status != http.StatusOK {
+		t.Fatalf("want status %d for GET /signup, got %d", http.StatusOK, status)
+	}
+
+	match := csrfTokenRX.FindStringSubmatch(body)
+	if match == nil {
+		t.Fatal("no CSRF token found in the signup form")
+	}
+
+	form := url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "supersecret1")
+	form.Set("csrf_token", match[1])
+
+	status, _, _ = ts.postForm(t, "/signup", form)
+	if status != http.StatusSeeOther {
+		t.Fatalf("want status %d for a valid signup, got %d", http.StatusSeeOther, status)
+	}
+
+	// The session cookie carries the new authenticated user.
+	status, _, body = ts.get(t, "/restricted")
+	if status != http.StatusOK {
+		t.Fatalf("want status %d for /restricted after signup, got %d", http.StatusOK, status)
+	}
+	if !contains(body, "alice@example.com") {
+		t.Errorf("want the authenticated email on the restricted page, got %q", body)
+	}
+}
+
+func TestSignupValidation(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	tests := []struct {
+		name     string
+		email    string
+		password string
+	}{
+		{"blank email", "", "supersecret1"},
+		{"invalid email", "not-an-email", "supersecret1"},
+		{"short password", "alice@example.com", "short"},
+		{"common password", "alice@example.com", "password"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, body := ts.get(t, "/signup")
+
+			match := csrfTokenRX.FindStringSubmatch(body)
+			if match == nil {
+				t.Fatal("no CSRF token found in the signup form")
+			}
+
+			form := url.Values{}
+			form.Set("email", tt.email)
+			form.Set("password", tt.password)
+			form.Set("csrf_token", match[1])
+
+			status, _, _ := ts.postForm(t, "/signup", form)
+			if status != http.StatusUnprocessableEntity {
+				t.Errorf("want status %d, got %d", http.StatusUnprocessableEntity, status)
+			}
+		})
+	}
+}
+
+func TestSignupWithoutCSRF(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	form := url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "supersecret1")
+
+	status, _, _ := ts.postForm(t, "/signup", form)
+	if status != http.StatusBadRequest {
+		t.Errorf("want status %d without a CSRF token, got %d", http.StatusBadRequest, status)
+	}
+}
+
+// createAccount signs a user up through the signup flow and returns a
+// fresh anonymous test server against the same application, for testing
+// the login flow with a clean session.
+func createAccount(t *testing.T, app *application) *testServer {
+	ts := newTestServer(t, app)
+
+	_, _, body := ts.get(t, "/signup")
+	match := csrfTokenRX.FindStringSubmatch(body)
+	if match == nil {
+		t.Fatal("no CSRF token found in the signup form")
+	}
+
+	form := url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "supersecret1")
+	form.Set("csrf_token", match[1])
+	status, _, _ := ts.postForm(t, "/signup", form)
+	if status != http.StatusSeeOther {
+		t.Fatalf("want status %d for signup, got %d", http.StatusSeeOther, status)
+	}
+
+	return newTestServer(t, app)
+}
+
+func TestLoginFlow(t *testing.T) {
+	app := newTestApplication(t)
+	ts := createAccount(t, app)
+
+	_, _, loginPage := ts.get(t, "/login")
+	match := csrfTokenRX.FindStringSubmatch(loginPage)
+	if match == nil {
+		t.Fatal("no CSRF token found in the login form")
+	}
+
+	form := url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "supersecret1")
+	form.Set("csrf_token", match[1])
+
+	status, _, _ := ts.postForm(t, "/login", form)
+	if status != http.StatusSeeOther {
+		t.Fatalf("want status %d for a valid login, got %d", http.StatusSeeOther, status)
+	}
+
+	status, _, body := ts.get(t, "/restricted")
+	if status != http.StatusOK || !contains(body, "alice@example.com") {
+		t.Errorf("want an authenticated session after login, got status %d", status)
+	}
+}
+
+func TestLoginWrongPassword(t *testing.T) {
+	app := newTestApplication(t)
+	ts := createAccount(t, app)
+
+	_, _, loginPage := ts.get(t, "/login")
+	match := csrfTokenRX.FindStringSubmatch(loginPage)
+	if match == nil {
+		t.Fatal("no CSRF token found in the login form")
+	}
+
+	form := url.Values{}
+	form.Set("email", "alice@example.com")
+	form.Set("password", "wrongpassword")
+	form.Set("csrf_token", match[1])
+
+	status, _, body := ts.postForm(t, "/login", form)
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("want status %d for a wrong password, got %d", http.StatusUnprocessableEntity, status)
+	}
+	if !contains(body, "Email or password is incorrect") {
+		t.Errorf("want the generic error message, got %q", body)
+	}
+}
