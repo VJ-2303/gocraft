@@ -1,0 +1,10 @@
+# Editor and OS noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test and coverage artifacts
+*.test
+*.out
+coverage.html
