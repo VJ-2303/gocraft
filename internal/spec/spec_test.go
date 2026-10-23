@@ -351,8 +351,10 @@ func TestResolve(t *testing.T) {
 		if r.UseDB || r.NeedsDB {
 			t.Error("want no database for a plain web app")
 		}
-		if len(r.Requires) != 0 {
-			t.Errorf("want no requirements for a plain web app, got %v", r.Requires)
+		// A plain web app requires only the form decoder; APIs with no
+		// options require nothing.
+		if len(r.Requires) != 1 || r.Requires[0].Path != "github.com/go-playground/form/v4" {
+			t.Errorf("want only the form decoder requirement for a plain web app, got %v", r.Requires)
 		}
 		if r.Port < 1000 || r.Port > 9999 {
 			t.Errorf("want port in [1000,9999], got %d", r.Port)

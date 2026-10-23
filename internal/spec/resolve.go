@@ -1,8 +1,6 @@
 package spec
 
 import (
-	crand "crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"math/rand/v2"
 	"path"
@@ -65,7 +63,7 @@ var requireVersions = map[string]string{
 	"github.com/alexedwards/scs/v2":       "v2.9.0",
 	"github.com/justinas/nosurf":          "v1.2.0",
 	"github.com/golang-jwt/jwt/v5":        "v5.3.1",
-	"github.com/gorilla/schema":           "v1.4.1",
+	"github.com/go-playground/form/v4":    "v4.5.0",
 	"github.com/wneessen/go-mail":         "v0.8.1",
 	"golang.org/x/crypto":                 "v0.58.0",
 }
@@ -132,9 +130,9 @@ type ResolvedSpec struct {
 	// codebase to avoid cookie clashes between local apps.
 	SessionCookieName string
 
-	// CookieSecretKey is a random base64-encoded 32-byte key used by the
-	// secure cookies helpers, generated per codebase for development.
-	// Documented for replacement in production.
+	// CookieSecretKey is a random 32-character string used by the secure
+	// cookies helpers, generated per codebase for development. Documented
+	// for replacement in production.
 	CookieSecretKey string
 
 	// Requires lists the module requirements (path + version) implied by
@@ -189,7 +187,7 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 		NeedsMailer:       s.Emails || s.ErrorNotifications || s.AccountsFull || s.AccountsJWT,
 		Port:              1000 + rand.IntN(9000),
 		SessionCookieName: "session_" + randomSuffix(8),
-		CookieSecretKey:   base64Key(),
+		CookieSecretKey:   randomKey(),
 	}
 
 	r.NeedsDB = r.UseDB || s.Sessions || s.AccountsFull || s.AccountsJWT
@@ -267,6 +265,10 @@ func (s ProjectSpec) requires(r *ResolvedSpec) []RequireLine {
 		add("github.com/alexedwards/scs/v2")
 	}
 
+	if s.AppType == AppWeb {
+		add("github.com/go-playground/form/v4")
+	}
+
 	if s.AccountsFull {
 		add("github.com/justinas/nosurf")
 	}
@@ -316,14 +318,10 @@ func randomSuffix(n int) string {
 	return string(b)
 }
 
-// base64Key returns a random base64-encoded 32-byte key, suitable as a
-// cookie encryption secret for development.
-func base64Key() string {
-	key := make([]byte, 32)
-	if _, err := crand.Read(key); err != nil {
-		panic(fmt.Sprintf("generating cookie secret key: %v", err))
-	}
-	return base64.StdEncoding.EncodeToString(key)
+// randomKey returns a random 32-character alphanumeric string, suitable
+// as a cookie signing or encryption secret for development.
+func randomKey() string {
+	return randomSuffix(32)
 }
 
 // String returns a compact one-line summary of the spec, useful for logs.

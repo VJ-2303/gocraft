@@ -62,8 +62,9 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/mailer/mailer.go.tmpl", OutPath: "internal/mailer/mailer.go", Cond: rsp.NeedsMailer},
 		{Template: "shared/internal/password/hash.go.tmpl", OutPath: "internal/password/hash.go", Cond: rsp.HasAuth},
 		{Template: "shared/internal/password/common.go.tmpl", OutPath: "internal/password/common.go", Cond: rsp.HasAuth},
-		{Template: "shared/internal/validator/validator.go.tmpl", OutPath: "internal/validator/validator.go", Cond: rsp.HasAuth},
-		{Template: "shared/internal/request/postform.go.tmpl", OutPath: "internal/request/postform.go", Cond: rsp.AccountsFull},
+		{Template: "shared/internal/validator/validator.go.tmpl", OutPath: "internal/validator/validator.go", Cond: true},
+		{Template: "shared/internal/request/postform.go.tmpl", OutPath: "internal/request/postform.go", Cond: rsp.AppType == spec.AppWeb},
+		{Template: "shared/internal/request/json.go.tmpl", OutPath: "internal/request/json.go", Cond: rsp.AppType == spec.AppAPI},
 
 		{Template: "shared/assets/emails/example.tmpl", OutPath: "assets/emails/example.tmpl", Cond: rsp.NeedsMailer, Copy: true},
 		{Template: "shared/assets/emails/error-notification.tmpl", OutPath: "assets/emails/error-notification.tmpl", Cond: rsp.ErrorNotifications, Copy: true},
@@ -114,6 +115,7 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 
 		{Template: "web/cmd/web/main.go.tmpl", OutPath: "cmd/web/main.go", Cond: true},
 		{Template: "web/cmd/web/middleware.go.tmpl", OutPath: "cmd/web/middleware.go", Cond: true},
+		{Template: "web/cmd/web/errors.go.tmpl", OutPath: "cmd/web/errors.go", Cond: true},
 		{Template: "web/cmd/web/handlers.go.tmpl", OutPath: "cmd/web/handlers.go", Cond: true},
 		{Template: "web/cmd/web/templates.go.tmpl", OutPath: "cmd/web/templates.go", Cond: true},
 		{Template: "web/cmd/web/helpers.go.tmpl", OutPath: "cmd/web/helpers.go", Cond: true},
@@ -132,6 +134,7 @@ func apiFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: routes, OutPath: "cmd/api/routes.go", Cond: true},
 		{Template: "api/cmd/api/main.go.tmpl", OutPath: "cmd/api/main.go", Cond: true},
 		{Template: "api/cmd/api/middleware.go.tmpl", OutPath: "cmd/api/middleware.go", Cond: true},
+		{Template: "api/cmd/api/errors.go.tmpl", OutPath: "cmd/api/errors.go", Cond: true},
 		{Template: "api/cmd/api/handlers.go.tmpl", OutPath: "cmd/api/handlers.go", Cond: true},
 		{Template: "api/cmd/api/helpers.go.tmpl", OutPath: "cmd/api/helpers.go", Cond: true},
 		{Template: "api/cmd/api/handlers-auth.go.tmpl", OutPath: "cmd/api/handlers-auth.go", Cond: rsp.AccountsJWT},

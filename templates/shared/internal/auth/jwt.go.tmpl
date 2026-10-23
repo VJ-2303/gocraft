@@ -42,17 +42,13 @@ type Tokenizer struct {
 }
 
 // NewTokenizer returns a Tokenizer signing tokens with the given
-// base64-encoded 32-byte secret.
+// 32-character secret key.
 func NewTokenizer(secret string) (Tokenizer, error) {
-	decoded, err := base64.StdEncoding.DecodeString(secret)
-	if err != nil {
-		return Tokenizer{}, fmt.Errorf("failed to base64-decode secret key: %w", err)
-	}
-	if len(decoded) != 32 {
-		return Tokenizer{}, errors.New("secret key must be 32 bytes")
+	if len(secret) != 32 {
+		return Tokenizer{}, errors.New("secret key must be 32 characters")
 	}
 
-	return Tokenizer{secret: decoded}, nil
+	return Tokenizer{secret: []byte(secret)}, nil
 }
 
 // Create returns a signed token for the given subject, lifetime and

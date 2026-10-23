@@ -22,6 +22,7 @@ import (
 {{- end}}
 {{- if .NeedsMailer}}
 	"{{.ModulePath}}/assets"
+	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/mailer"
 {{- end}}
 )
@@ -55,7 +56,7 @@ func newTestApplication(t *testing.T) *application {
 
 	// The mailer points at an unroutable local port; outbound email in
 	// tests is expected to fail and is only logged (and discarded).
-	m, err := mailer.New(logger, assets.EmailFiles, "127.0.0.1", 1, "", "", "test@example.com")
+	m, err := mailer.New(logger, assets.EmailFiles, funcs.All(), "127.0.0.1", 1, "", "", "test@example.com")
 	if err != nil {
 		t.Fatalf("initializing test mailer: %v", err)
 	}
@@ -63,8 +64,8 @@ func newTestApplication(t *testing.T) *application {
 {{- end}}
 {{- if .AccountsJWT}}
 
-	// The test secret is a fixed base64-encoded 32-byte key.
-	tokenizer, err := auth.NewTokenizer("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+	// The test secret is a fixed 32-character key.
+	tokenizer, err := auth.NewTokenizer("0123456789012345678901234567890x")
 	if err != nil {
 		t.Fatalf("initializing tokenizer: %v", err)
 	}

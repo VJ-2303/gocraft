@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/gorilla/schema"
+	"github.com/go-playground/form/v4"
 
 	"{{.ModulePath}}/internal/response"
 )
@@ -14,21 +14,17 @@ import (
 // accidental or deliberate large payloads from exhausting server memory.
 const maxBytes = 1 << 20
 
-// decoder parses form data into structs using gorilla/schema. Unknown
-// keys are ignored so that new form fields can be added without breaking
-// older clients.
-var decoder = newDecoder()
-
-func newDecoder() *schema.Decoder {
-	d := schema.NewDecoder()
-	d.IgnoreUnknownKeys(true)
-	return d
-}
+// decoder parses form data into structs using go-playground/form.
+// Fields map by the name attribute of each input; use a form:"-" tag to
+// skip a field.
+var decoder = form.NewDecoder()
 
 // DecodePostForm fills dst with the parsed POST form data of the
 // request. The request body is limited to maxBytes; malformed or
 // oversized bodies return a response.BadRequestError.
-func DecodePostForm(r *http.Request, dst any) error {
+func DecodePostForm(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
 	err := r.ParseForm()
 	if err != nil {
 		return &response.BadRequestError{Message: "unable to parse form data"}

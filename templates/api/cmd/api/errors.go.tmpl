@@ -1,0 +1,87 @@
+// The API's error-handling helpers. Call return immediately after using
+// any of these, so the rest of the handler does not execute.
+package main
+
+import (
+	"errors"
+	"net/http"
+	"runtime/debug"
+
+	"{{.ModulePath}}/internal/response"
+	"{{.ModulePath}}/internal/validator"
+)
+
+// reportServerError logs an error at the ERROR level{{if .ErrorNotifications}} and emails an
+// alert with the details to the configured admin address{{end}}. It does not
+// send an HTTP response.
+func (app *application) reportServerError(r *http.Request, err error) {
+	var (
+		method = r.Method
+		uri    = r.URL.RequestURI()
+		trace  = string(debug.Stack())
+	)
+
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
+{{- if .ErrorNotifications}}
+
+	app.backgroundTask(func() error {
+		data := app.defaultEmailData()
+		data["Method"] = method
+		data["URI"] = uri
+		data["Trace"] = trace
+		data["Error"] = err.Error()
+
+		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
+	})
+{{- end}}
+}
+
+// serverError reports the error and sends a 500 Internal Server Error
+// response with a JSON body.
+func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	app.reportServerError(r, err)
+
+	message := "the server encountered a problem and could not process your request"
+	if err := response.JSONWithHeaders(w, http.StatusInternalServerError, envelope{"Error": message}, nil); err != nil {
+		app.reportServerError(r, err)
+	}
+}
+
+// notFound sends a 404 Not Found response with a JSON body.
+func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
+	message := "the requested resource could not be found"
+	if err := response.JSONWithHeaders(w, http.StatusNotFound, envelope{"Error": message}, nil); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// methodNotAllowed sends a 405 Method Not Allowed response with a JSON
+// body.
+func (app *application) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
+	message := "the request method is not supported for this resource"
+	if err := response.JSONWithHeaders(w, http.StatusMethodNotAllowed, envelope{"Error": message}, nil); err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// badRequest sends a 400 Bad Request response for problems with the
+// client's request, such as malformed JSON bodies.
+func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
+	var badRequestErr *response.BadRequestError
+	if errors.As(err, &badRequestErr) {
+		if err := response.JSONWithHeaders(w, http.StatusBadRequest, envelope{"Error": badRequestErr.Message}, nil); err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+
+	app.serverError(w, r, err)
+}
+
+// failedValidation sends a 422 Unprocessable Entity response carrying
+// the validation field errors.
+func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, v validator.Validator) {
+	if err := response.JSONWithHeaders(w, http.StatusUnprocessableEntity, envelope{"FieldErrors": v.FieldErrors}, nil); err != nil {
+		app.serverError(w, r, err)
+	}
+}

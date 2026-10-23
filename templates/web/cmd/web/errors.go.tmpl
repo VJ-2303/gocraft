@@ -1,0 +1,87 @@
+// The application's error-handling helpers. Call return immediately
+// after using any of these, so the rest of the handler does not execute.
+package main
+
+import (
+	"errors"
+	"net/http"
+	"runtime/debug"
+{{- if .CustomErrorPages}}
+	"fmt"
+{{- end}}
+
+	"{{.ModulePath}}/internal/response"
+)
+
+// reportServerError logs an error at the ERROR level{{if .ErrorNotifications}} and emails an
+// alert with the details to the configured admin address{{end}}. It does not
+// send an HTTP response.
+func (app *application) reportServerError(r *http.Request, err error) {
+	var (
+		method = r.Method
+		uri    = r.URL.RequestURI()
+		trace  = string(debug.Stack())
+	)
+
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
+{{- if .ErrorNotifications}}
+
+	app.backgroundTask(func() error {
+		data := app.defaultEmailData()
+		data["Method"] = method
+		data["URI"] = uri
+		data["Trace"] = trace
+		data["Error"] = err.Error()
+
+		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
+	})
+{{- end}}
+}
+
+// serverError reports the error and sends a 500 Internal Server Error
+// response to the client.
+func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	app.reportServerError(r, err)
+	app.clientError(w, r, http.StatusInternalServerError)
+}
+
+// clientError sends a specific status code to the client, rendering the
+// custom error page when enabled.
+func (app *application) clientError(w http.ResponseWriter, r *http.Request, status int) {
+{{- if .CustomErrorPages}}
+	data := app.defaultHTMLData(r)
+	data["Status"] = status
+	data["StatusText"] = http.StatusText(status)
+	data["Message"] = fmt.Sprintf("The request could not be completed: %s.", http.StatusText(status))
+
+	app.render(w, r, status, "error.tmpl", data)
+{{- else}}
+	http.Error(w, http.StatusText(status), status)
+{{- end}}
+}
+
+// notFound sends a 404 Not Found response to the client.
+func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
+	app.clientError(w, r, http.StatusNotFound)
+}
+
+// badRequest sends a 400 Bad Request response for problems with the
+// client's request, such as malformed form data or query strings.
+func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
+	var badRequestErr *response.BadRequestError
+	if errors.As(err, &badRequestErr) {
+{{- if .CustomErrorPages}}
+		data := app.defaultHTMLData(r)
+		data["Status"] = http.StatusBadRequest
+		data["StatusText"] = http.StatusText(http.StatusBadRequest)
+		data["Message"] = badRequestErr.Message
+
+		app.render(w, r, http.StatusBadRequest, "error.tmpl", data)
+{{- else}}
+		http.Error(w, badRequestErr.Message, http.StatusBadRequest)
+{{- end}}
+		return
+	}
+
+	app.serverError(w, r, err)
+}
