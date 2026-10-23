@@ -55,6 +55,17 @@ func TestGateGenerate(t *testing.T) {
 			s.Router = spec.RouterGorilla
 			return s
 		}(),
+		// Exercises the JWT accounts variant: registration, activation,
+		// token issuance and protected routes.
+		"jwtapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.AppType = spec.AppAPI
+			s.Database = spec.DBSQLite
+			s.Migrations = true
+			s.AccountsJWT = true
+			s.ApplyDependencies()
+			return s
+		}(),
 		// Exercises the full user accounts feature: signup, login,
 		// password reset, CSRF and session authentication.
 		"accountsapp": func() spec.ProjectSpec {

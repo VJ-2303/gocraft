@@ -1,0 +1,60 @@
+// Package request contains helpers for reading data from HTTP requests.
+package request
+
+import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+
+	"{{.ModulePath}}/internal/response"
+)
+
+// maxBytes limits the size of request bodies to 1MB, preventing
+// accidental or deliberate large payloads from exhausting server memory.
+const maxBytes = 1 << 20
+
+// DecodeJSONObject reads the request body as a JSON object and fills
+// dst, rejecting unknown members so that client typos fail loudly. The
+// body is limited to maxBytes.
+func DecodeJSONObject(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
+	dec := jsontext.NewDecoder(r.Body)
+	if err := json.UnmarshalDecode(dec, dst, json.RejectUnknownMembers(true)); err != nil {
+		var maxBytesError *http.MaxBytesError
+		switch {
+		case errors.As(err, &maxBytesError):
+			return &response.BadRequestError{Message: "request body must not be larger than 1MB"}
+		default:
+			return &response.BadRequestError{Message: fmt.Sprintf("request body contains invalid JSON: %v", err)}
+		}
+	}
+
+	// Ensure the body holds exactly one JSON value and nothing else.
+	if _, err := dec.ReadValue(); !errors.Is(err, io.EOF) {
+		return &response.BadRequestError{Message: "request body must only contain a single JSON value"}
+	}
+
+	return nil
+}
+
+// DecodeJSONArray reads the request body as a JSON array of values and
+// fills dst, which must be a pointer to a slice. The body is limited to
+// maxBytes.
+func DecodeJSONArray(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+
+	dec := jsontext.NewDecoder(r.Body)
+	if err := json.UnmarshalDecode(dec, dst); err != nil {
+		return &response.BadRequestError{Message: fmt.Sprintf("request body contains invalid JSON: %v", err)}
+	}
+
+	if _, err := dec.ReadValue(); !errors.Is(err, io.EOF) {
+		return &response.BadRequestError{Message: "request body must only contain a single JSON value"}
+	}
+
+	return nil
+}

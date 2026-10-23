@@ -1,0 +1,62 @@
+package database
+
+import (
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// ActivationToken represents an account activation token stored in the
+// activation_tokens table. Only the SHA-256 hash of the token is stored;
+// the plaintext token exists solely in the activation link that is
+// emailed to the user.
+type ActivationToken struct {
+	UserID      int64     `db:"user_id"`
+	HashedToken []byte    `db:"hashed_token"`
+	Expiry      time.Time `db:"expiry"`
+}
+
+// ActivationTokenModel wraps a sqlx.DB and provides methods for working
+// with account activation tokens.
+type ActivationTokenModel struct {
+	DB *sqlx.DB
+}
+
+// Insert stores an activation token hash for the user, expiring after
+// the given time-to-live.
+func (m ActivationTokenModel) Insert(userID int64, hashedToken []byte, ttl time.Duration) error {
+	query := m.DB.Rebind("INSERT INTO activation_tokens (user_id, hashed_token, expiry) VALUES (?, ?, ?)")
+
+	_, err := m.DB.Exec(query, userID, hashedToken, time.Now().UTC().Add(ttl))
+	return err
+}
+
+// Get fetches the unexpired activation token matching the hashed token.
+// The second return value reports whether a valid, unexpired token was
+// found.
+func (m ActivationTokenModel) Get(hashedToken []byte) (*ActivationToken, bool, error) {
+	query := m.DB.Rebind(`
+		SELECT user_id, hashed_token, expiry
+		FROM activation_tokens
+		WHERE hashed_token = ? AND expiry > ?`)
+
+	var token ActivationToken
+	err := m.DB.Get(&token, query, hashedToken, time.Now().UTC())
+	if err != nil {
+		if isNoRows(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &token, true, nil
+}
+
+// Delete removes every activation token for the user, called after a
+// successful activation.
+func (m ActivationTokenModel) Delete(userID int64) error {
+	query := m.DB.Rebind("DELETE FROM activation_tokens WHERE user_id = ?")
+
+	_, err := m.DB.Exec(query, userID)
+	return err
+}

@@ -36,6 +36,10 @@ import (
 	"{{.ModulePath}}/internal/mailer"
 
 {{- end}}
+{{- if .AccountsJWT}}
+	"{{.ModulePath}}/internal/auth"
+
+{{- end}}
 {{- if .Migrations}}
 	"{{.ModulePath}}/assets"
 
@@ -81,6 +85,9 @@ func run() error {
 {{- end}}
 {{- if .SecureCookies}}
 	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for cookie encryption")
+{{- end}}
+{{- if .AccountsJWT}}
+	flag.StringVar(&cfg.jwtSecret, "jwt-secret", "{{.CookieSecretKey}}", "base64-encoded 32-byte secret key for signing authentication tokens")
 {{- end}}
 {{- if .NeedsMailer}}
 	flag.StringVar(&cfg.smtpHost, "smtp-host", "localhost", "SMTP server host")
@@ -175,15 +182,28 @@ func run() error {
 
 	logger.Info("mailer initialized", "host", cfg.smtpHost, "port", cfg.smtpPort)
 {{- end}}
+{{- if .AccountsJWT}}
+
+	// Initialize the JWT tokenizer for bearer-token authentication.
+	tokenizer, err := auth.NewTokenizer(cfg.jwtSecret)
+	if err != nil {
+		return fmt.Errorf("initializing tokenizer: %w", err)
+	}
+{{- end}}
 
 	app := &application{
 		config: cfg,
 		logger: logger,
 {{- if .NeedsDB}}
-		db:     db,
+		db: db,
 {{- end}}
 {{- if .NeedsMailer}}
 		mailer: mailer,
+{{- end}}
+{{- if .AccountsJWT}}
+		tokenizer:        tokenizer,
+		users:            database.UserModel{DB: db},
+		activationTokens: database.ActivationTokenModel{DB: db},
 {{- end}}
 	}
 
@@ -309,6 +329,9 @@ type config struct {
 {{- if .SecureCookies}}
 	cookieSecretKey string
 {{- end}}
+{{- if .AccountsJWT}}
+	jwtSecret string
+{{- end}}
 {{- if .NeedsMailer}}
 	smtpHost     string
 	smtpPort     int
@@ -334,6 +357,11 @@ type application struct {
 {{- end}}
 {{- if .NeedsMailer}}
 	mailer mailer.Mailer
+{{- end}}
+{{- if .AccountsJWT}}
+	tokenizer        auth.Tokenizer
+	users            database.UserModel
+	activationTokens database.ActivationTokenModel
 {{- end}}
 	wg     sync.WaitGroup
 }

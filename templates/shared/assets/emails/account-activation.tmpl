@@ -1,0 +1,25 @@
+{{define "subject"}}Activate your account{{end}}
+
+{{define "plainBody"}}
+Hello,
+
+Welcome to the service! Use the token below to activate your account:
+
+{{.ActivationToken}}
+
+Send it to the activation endpoint as JSON:
+
+    PUT /v1/tokens/activation
+    {"token": "{{.ActivationToken}}"}
+
+The token is valid for 3 days. If you did not create an account, you can
+safely ignore this email.
+{{end}}
+
+{{define "htmlBody"}}
+<p>Hello,</p>
+<p>Welcome to the service! Use the token below to activate your account:</p>
+<pre>{{.ActivationToken}}</pre>
+<p>Send it to the <code>PUT /v1/tokens/activation</code> endpoint as JSON.
+The token is valid for 3 days.</p>
+{{end}}

@@ -14,6 +14,14 @@ func (app *application) routes() http.Handler {
 
 	mux.Get("/v1/healthcheck", app.healthcheck)
 
+{{- if .AccountsJWT}}
+
+	// User account routes.
+	mux.Post("/v1/users", app.registerUser)
+	mux.Put("/v1/tokens/activation", app.activateUser)
+	mux.Post("/v1/tokens/authentication", app.createAuthenticationToken)
+	mux.Get("/v1/me", app.requireAuthenticatedUser(app.whoami))
+{{- end}}
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
 {{- if .BasicAuth}}

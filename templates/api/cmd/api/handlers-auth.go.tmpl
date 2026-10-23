@@ -1,0 +1,274 @@
+// The API's user account handlers: registration, activation, token
+// creation and the authenticated example endpoint.
+package main
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"{{.ModulePath}}/internal/password"
+	"{{.ModulePath}}/internal/request"
+	"{{.ModulePath}}/internal/response"
+	"{{.ModulePath}}/internal/validator"
+)
+
+// accessTokenLifetime is how long a JWT remains valid.
+const accessTokenLifetime = 24 * time.Hour
+
+// registerUserInput holds the JSON payload for user registration.
+type registerUserInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// registerUser creates a new user account and emails an activation
+// token. The account cannot authenticate until it is activated.
+func (app *application) registerUser(w http.ResponseWriter, r *http.Request) {
+	var input registerUserInput
+
+	err := request.DecodeJSONObject(w, r, &input)
+	if err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	v := validator.Validator{}
+	v.CheckField(validator.NotBlank(input.Email), "email", "must not be blank")
+	v.CheckField(validator.IsEmail(input.Email), "email", "must be a valid email address")
+	v.CheckField(validator.MaxChars(input.Email, 255), "email", "must not be more than 255 characters")
+	v.CheckField(validator.NotBlank(input.Password), "password", "must not be blank")
+	v.CheckField(validator.MinChars(input.Password, 8), "password", "must be at least 8 characters")
+	v.CheckField(validator.MaxChars(input.Password, 72), "password", "must not be more than 72 characters")
+	v.CheckField(!password.Common(input.Password), "password", "must not be a common password")
+
+	// Reject email addresses that already have an account.
+	_, found, err := app.users.GetByEmail(input.Email)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if found {
+		v.AddFieldError("email", "already in use")
+	}
+
+	if !v.Valid() {
+		app.failedValidation(w, r, v)
+		return
+	}
+
+	hashedPassword, err := password.Hash(input.Password)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	id, err := app.users.Insert(input.Email, hashedPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Generate the plaintext activation token, store only its SHA-256
+	// hash, and email the plaintext to the user.
+	plaintextToken := rand.Text()
+	hash := sha256.Sum256([]byte(plaintextToken))
+
+	err = app.activationTokens.Insert(id, hash[:], 3*24*time.Hour)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	data := app.defaultEmailData()
+	data["To"] = input.Email
+	data["ActivationToken"] = plaintextToken
+
+	app.backgroundTask(func() error {
+		return app.mailer.Send(input.Email, data, "account-activation.tmpl")
+	})
+
+	headers := make(http.Header)
+	headers.Set("Location", "/v1/users")
+
+	err = response.WriteJSON(w, http.StatusAccepted, envelope{"user": envelope{"id": id, "email": input.Email}}, headers)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// activateUserInput holds the JSON payload for account activation.
+type activateUserInput struct {
+	Token string `json:"token"`
+}
+
+// activateUser activates an account using the plaintext token from the
+// registration email.
+func (app *application) activateUser(w http.ResponseWriter, r *http.Request) {
+	var input activateUserInput
+
+	err := request.DecodeJSONObject(w, r, &input)
+	if err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	v := validator.Validator{}
+	v.CheckField(validator.NotBlank(input.Token), "token", "must not be blank")
+	if !v.Valid() {
+		app.failedValidation(w, r, v)
+		return
+	}
+
+	hash := sha256.Sum256([]byte(input.Token))
+
+	token, found, err := app.activationTokens.Get(hash[:])
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if !found {
+		app.failedValidation(w, r, validator.Validator{
+			FieldErrors: map[string]string{"token": "invalid or expired activation token"},
+		})
+		return
+	}
+
+	err = app.users.SetActivated(token.UserID, true)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	err = app.activationTokens.Delete(token.UserID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	err = response.WriteJSON(w, http.StatusOK, envelope{"message": "your account has been successfully activated"}, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// createTokenInput holds the JSON payload for the authentication
+// endpoint.
+type createTokenInput struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+// createAuthenticationToken verifies the credentials and returns a
+// signed JWT bearer token.
+func (app *application) createAuthenticationToken(w http.ResponseWriter, r *http.Request) {
+	var input createTokenInput
+
+	err := request.DecodeJSONObject(w, r, &input)
+	if err != nil {
+		app.badRequest(w, r, err)
+		return
+	}
+
+	v := validator.Validator{}
+	v.CheckField(validator.NotBlank(input.Email), "email", "must not be blank")
+	v.CheckField(validator.IsEmail(input.Email), "email", "must be a valid email address")
+	v.CheckField(validator.NotBlank(input.Password), "password", "must not be blank")
+	if !v.Valid() {
+		app.failedValidation(w, r, v)
+		return
+	}
+
+	user, found, err := app.users.GetByEmail(input.Email)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	matches, err := password.Matches(input.Password, user.HashedPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// The same error covers unknown emails, wrong passwords and
+	// unactivated accounts, so responses do not leak account details.
+	if !found || !matches || !user.Activated {
+		app.invalidCredentials(w, r)
+		return
+	}
+
+	token, err := app.tokenizer.Create(fmt.Sprint(user.ID), accessTokenLifetime, "authentication")
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	err = response.WriteJSON(w, http.StatusCreated, envelope{"authentication_token": token}, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// whoami is an example endpoint that requires an authenticated user.
+func (app *application) whoami(w http.ResponseWriter, r *http.Request) {
+	user, _ := contextGetAuthenticatedUser(r)
+
+	err := response.WriteJSON(w, http.StatusOK, envelope{
+		"user": envelope{
+			"id":        user.ID,
+			"email":     user.Email,
+			"activated": user.Activated,
+		},
+	}, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// badRequest writes a 400 response for a malformed request body.
+func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err error) {
+	var badRequest *response.BadRequestError
+	if errors.As(err, &badRequest) {
+		err = response.WriteJSON(w, http.StatusBadRequest, envelope{"error": badRequest.Message}, nil)
+		if err != nil {
+			app.serverError(w, r, err)
+		}
+		return
+	}
+	app.serverError(w, r, err)
+}
+
+// failedValidation writes a 422 response carrying the field errors.
+func (app *application) failedValidation(w http.ResponseWriter, r *http.Request, v validator.Validator) {
+	err := response.WriteJSON(w, http.StatusUnprocessableEntity, envelope{"error": v.FieldErrors}, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// invalidCredentials writes a generic 401 response.
+func (app *application) invalidCredentials(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("WWW-Authenticate", `Bearer realm="restricted", charset="UTF-8"`)
+	err := response.WriteJSON(w, http.StatusUnauthorized, envelope{"error": "invalid email or password"}, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// bearerToken extracts the token from an Authorization: Bearer header.
+func bearerToken(r *http.Request) (string, bool) {
+	header := r.Header.Get("Authorization")
+	if header == "" {
+		return "", false
+	}
+	parts := strings.SplitN(header, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		return "", false
+	}
+	return parts[1], true
+}
