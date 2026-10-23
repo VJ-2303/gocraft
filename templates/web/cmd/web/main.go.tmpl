@@ -6,7 +6,6 @@ import (
 	"context"
 	"embed"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -16,6 +15,17 @@ import (
 	"syscall"
 	"time"
 
+{{- if eq .LogFormat "colorized"}}
+	"{{.ModulePath}}/internal/log"
+
+{{- end}}
+{{- if eq .ConfigSource "env"}}
+	"{{.ModulePath}}/internal/env"
+
+{{- else}}
+	"flag"
+
+{{- end}}
 	"{{.ModulePath}}/assets"
 	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/response"
@@ -38,6 +48,7 @@ func main() {
 // run performs the startup and shutdown of the application. All errors are
 // returned and handled by main, keeping this function's control flow simple.
 func run() error {
+{{- if eq .ConfigSource "flags"}}
 	// Parse the configuration settings for the application from the
 	// command-line flags.
 	var cfg config
@@ -53,7 +64,32 @@ func run() error {
 	flag.BoolVar(&cfg.dbAutomigrate, "db-automigrate", true, "apply up migrations automatically on startup")
 {{- end}}
 {{- end}}
+{{- if .BasicAuth}}
+	flag.StringVar(&cfg.basicAuthUsername, "basic-auth-username", "admin", "basic auth username")
+	flag.StringVar(&cfg.basicAuthPassword, "basic-auth-password", "password", "basic auth password")
+{{- end}}
 	flag.Parse()
+{{- else}}
+	// Read the configuration settings for the application from
+	// environment variables.
+	cfg := config{
+		baseURL:  env.GetString("BASE_URL", "http://localhost:{{.Port}}"),
+		httpPort: env.GetInt("HTTP_PORT", {{.Port}}),
+{{- if .NeedsDB}}
+		dbDSN:         env.GetString("DB_DSN", "{{.Driver.ExampleDSN}}"),
+		dbMaxConns:    env.GetInt("DB_MAX_CONNS", 25),
+		dbMinConns:    env.GetInt("DB_MIN_CONNS", 0),
+		dbMaxIdleTime: env.GetDuration("DB_MAX_IDLE_TIME", 15*time.Minute),
+{{- if .Migrations}}
+		dbAutomigrate: env.GetBool("DB_AUTOMIGRATE", true),
+{{- end}}
+{{- end}}
+{{- if .BasicAuth}}
+		basicAuthUsername: env.GetString("BASIC_AUTH_USERNAME", "admin"),
+		basicAuthPassword: env.GetString("BASIC_AUTH_PASSWORD", "password"),
+{{- end}}
+	}
+{{- end}}
 
 	// Initialize a logger writing to standard output.
 	logger := newLogger()
@@ -171,6 +207,10 @@ type config struct {
 	dbAutomigrate bool
 {{- end}}
 {{- end}}
+{{- if .BasicAuth}}
+	basicAuthUsername string
+	basicAuthPassword string
+{{- end}}
 }
 
 // application holds the dependencies of the application. Handlers, helpers
@@ -186,9 +226,14 @@ type application struct {
 	wg        sync.WaitGroup
 }
 
-// newLogger returns a slog.Logger writing plaintext records to standard
-// output.
+// newLogger returns a slog.Logger writing records to standard output in
+// the configured format.
 func newLogger() *slog.Logger {
-	handler := slog.NewTextHandler(os.Stdout, nil)
-	return slog.New(handler)
+{{- if eq .LogFormat "json"}}
+	return slog.New(slog.NewJSONHandler(os.Stdout, nil))
+{{- else if eq .LogFormat "colorized"}}
+	return slog.New(log.NewColorizedHandler(os.Stdout))
+{{- else}}
+	return slog.New(slog.NewTextHandler(os.Stdout, nil))
+{{- end}}
 }

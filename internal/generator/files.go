@@ -36,6 +36,8 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/funcs/funcs.go.tmpl", OutPath: "internal/funcs/funcs.go", Cond: true},
 		{Template: "shared/internal/response/json.go.tmpl", OutPath: "internal/response/json.go", Cond: true},
 		{Template: "shared/internal/database/database.go.tmpl", OutPath: "internal/database/database.go", Cond: rsp.NeedsDB},
+		{Template: "shared/internal/env/env.go.tmpl", OutPath: "internal/env/env.go", Cond: rsp.ConfigSource == spec.ConfigEnv},
+		{Template: "shared/internal/log/colorized.go.tmpl", OutPath: "internal/log/colorized.go", Cond: rsp.LogFormat == spec.LogColorized},
 
 		// The assets package embeds migrations (both app types) and the
 		// static files and HTML templates (web apps only).
@@ -77,6 +79,7 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "web/assets/html/pages/home.tmpl", OutPath: "assets/html/pages/home.tmpl", Cond: true, Copy: true},
 
 		{Template: "web/cmd/web/main.go.tmpl", OutPath: "cmd/web/main.go", Cond: true},
+		{Template: "web/cmd/web/middleware.go.tmpl", OutPath: "cmd/web/middleware.go", Cond: true},
 		{Template: "web/cmd/web/handlers.go.tmpl", OutPath: "cmd/web/handlers.go", Cond: true},
 		{Template: "web/cmd/web/templates.go.tmpl", OutPath: "cmd/web/templates.go", Cond: true},
 		{Template: "web/cmd/web/helpers.go.tmpl", OutPath: "cmd/web/helpers.go", Cond: true},
@@ -89,6 +92,7 @@ func apiFiles(rsp spec.ResolvedSpec) []FileSpec {
 	return []FileSpec{
 		{Template: routes, OutPath: "cmd/api/routes.go", Cond: true},
 		{Template: "api/cmd/api/main.go.tmpl", OutPath: "cmd/api/main.go", Cond: true},
+		{Template: "api/cmd/api/middleware.go.tmpl", OutPath: "cmd/api/middleware.go", Cond: true},
 		{Template: "api/cmd/api/handlers.go.tmpl", OutPath: "cmd/api/handlers.go", Cond: true},
 		{Template: "api/cmd/api/helpers.go.tmpl", OutPath: "cmd/api/helpers.go", Cond: true},
 	}

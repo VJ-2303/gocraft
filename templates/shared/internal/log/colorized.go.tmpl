@@ -1,0 +1,102 @@
+// Package log provides custom log/slog handlers.
+package log
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"sync"
+	"time"
+)
+
+// ANSI color escape sequences used by the colorized handler.
+const (
+	colorReset  = "\033[0m"
+	colorRed    = "\033[31m"
+	colorYellow = "\033[33m"
+	colorBlue   = "\033[34m"
+	colorGray   = "\033[90m"
+	colorCyan   = "\033[36m"
+)
+
+// colorizedHandler is a slog.Handler that writes colorized plaintext
+// records, e.g.:
+//
+//	12:00:00 INFO  starting server addr=:6633
+type colorizedHandler struct {
+	out   io.Writer
+	mu    *sync.Mutex
+	attrs []slog.Attr
+}
+
+// NewColorizedHandler returns a slog.Handler writing colorized plaintext
+// records to out.
+func NewColorizedHandler(out io.Writer) slog.Handler {
+	return &colorizedHandler{out: out, mu: &sync.Mutex{}}
+}
+
+func (h *colorizedHandler) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= slog.LevelInfo
+}
+
+func (h *colorizedHandler) Handle(_ context.Context, r slog.Record) error {
+	buf := fmt.Sprintf("%s%s%s %s",
+		colorGray,
+		r.Time.Format(time.TimeOnly),
+		colorReset,
+		levelColor(r.Level),
+	)
+
+	buf += r.Message
+
+	// Attributes from the handler and the record, in order.
+	attrs := append(h.attrs, collectAttrs(r)...)
+	for _, attr := range attrs {
+		buf += fmt.Sprintf(" %s%s%s=%v", colorCyan, attr.Key, colorReset, attr.Value)
+	}
+	buf += "\n"
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, err := io.WriteString(h.out, buf)
+	return err
+}
+
+func (h *colorizedHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	return &colorizedHandler{
+		out:   h.out,
+		mu:    h.mu,
+		attrs: append(append([]slog.Attr{}, h.attrs...), attrs...),
+	}
+}
+
+func (h *colorizedHandler) WithGroup(_ string) slog.Handler {
+	// Groups are flattened into the record attributes; sufficient for a
+	// development-oriented handler.
+	return h
+}
+
+// levelColor renders the level name, colorized by severity.
+func levelColor(level slog.Level) string {
+	switch {
+	case level >= slog.LevelError:
+		return fmt.Sprintf("%sERROR%s ", colorRed, colorReset)
+	case level >= slog.LevelWarn:
+		return fmt.Sprintf("%sWARN%s ", colorYellow, colorReset)
+	case level >= slog.LevelInfo:
+		return fmt.Sprintf("%sINFO%s ", colorBlue, colorReset)
+	default:
+		return fmt.Sprintf("%sDEBUG%s ", colorGray, colorReset)
+	}
+}
+
+// collectAttrs gathers the attributes held by a record.
+func collectAttrs(r slog.Record) []slog.Attr {
+	var attrs []slog.Attr
+	r.Attrs(func(attr slog.Attr) bool {
+		attrs = append(attrs, attr)
+		return true
+	})
+	return attrs
+}

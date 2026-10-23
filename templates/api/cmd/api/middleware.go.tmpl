@@ -1,0 +1,98 @@
+// The API's middleware.
+package main
+
+import (
+{{- if .BasicAuth}}
+	"crypto/subtle"
+{{- end}}
+	"fmt"
+	"net/http"
+{{- if .RequestLogging}}
+	"time"
+{{- end}}
+)
+
+{{- if .RequestLogging}}
+
+// logRequest logs every request with the response status code, body size
+// and duration.
+func (app *application) logRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		interceptor := &statusInterceptor{ResponseWriter: w, status: http.StatusOK}
+
+		next.ServeHTTP(interceptor, r)
+
+		app.logger.Info("request",
+			"method", r.Method,
+			"uri", r.URL.RequestURI(),
+			"status", interceptor.status,
+			"size", interceptor.bytes,
+			"duration", time.Since(start).String(),
+		)
+	})
+}
+
+// statusInterceptor records the status code and body size of a response.
+type statusInterceptor struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (w *statusInterceptor) WriteHeader(status int) {
+	w.status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+func (w *statusInterceptor) Write(b []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(b)
+	w.bytes += n
+	return n, err
+}
+{{- end}}
+{{- if .BasicAuth}}
+
+// basicAuth provides HTTP basic authentication for all routes, using the
+// credentials configured at startup. Change the defaults for anything
+// other than local development.
+func (app *application) basicAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username, password, ok := r.BasicAuth()
+		if !ok {
+			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+			app.clientError(w, http.StatusUnauthorized)
+			return
+		}
+
+		usernameMatches := subtle.ConstantTimeCompare([]byte(username), []byte(app.config.basicAuthUsername)) == 1
+		passwordMatches := subtle.ConstantTimeCompare([]byte(password), []byte(app.config.basicAuthPassword)) == 1
+
+		if !usernameMatches || !passwordMatches {
+			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+			app.clientError(w, http.StatusUnauthorized)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+{{- end}}
+
+// recoverPanic recovers from any panics in downstream handlers, logging
+// the error and sending a 500 response instead of closing the connection
+// abruptly. It also sets the Connection: close header on a panic so that
+// keep-alive connections are not reused.
+func (app *application) recoverPanic(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				w.Header().Set("Connection", "close")
+				app.serverError(w, r, fmt.Errorf("%s", err))
+			}
+		}()
+
+		next.ServeHTTP(w, r)
+	})
+}
