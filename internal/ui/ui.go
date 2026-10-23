@@ -20,12 +20,38 @@ import (
 func Run(ctx context.Context, logger *slog.Logger, version string) error {
 	fmt.Printf("nomoreboiler %s — generate a Go web application or JSON API\n\n", version)
 
-	s, err := collectSpec()
-	if err != nil {
-		if errors.Is(err, huh.ErrUserAborted) {
-			fmt.Println("Aborted. No codebase was generated.")
-			return nil
+	var s spec.ProjectSpec
+
+	for {
+		collected, err := collectSpec()
+		if err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				fmt.Println("Aborted. No codebase was generated.")
+				return nil
+			}
+			return err
 		}
+		s = collected
+
+		// Auto-enable any features that the selected features depend on,
+		// then re-check legality.
+		s.ApplyDependencies()
+
+		proceed, err := review(&s)
+		if err != nil {
+			if errors.Is(err, huh.ErrUserAborted) {
+				fmt.Println("Aborted. No codebase was generated.")
+				return nil
+			}
+			return err
+		}
+		if proceed {
+			break
+		}
+		// The user chose "start over": loop back to the first form.
+	}
+
+	if err := s.Validate(); err != nil {
 		return err
 	}
 
@@ -54,8 +80,7 @@ func Run(ctx context.Context, logger *slog.Logger, version string) error {
 	return nil
 }
 
-// collectSpec runs the wizard forms and returns the validated user's
-// answers.
+// collectSpec runs the wizard forms and returns the user's answers.
 func collectSpec() (spec.ProjectSpec, error) {
 	s := spec.Defaults()
 
@@ -63,6 +88,12 @@ func collectSpec() (spec.ProjectSpec, error) {
 		return s, err
 	}
 	if err := askModulePath(&s); err != nil {
+		return s, err
+	}
+	if err := askCustomize(&s); err != nil {
+		return s, err
+	}
+	if err := askPlusFeatures(&s); err != nil {
 		return s, err
 	}
 
