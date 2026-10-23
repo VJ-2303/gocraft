@@ -1,0 +1,8 @@
+{{define "page:title"}}500 Internal Server Error{{end}}
+
+{{define "page:main"}}
+<h1>500 Internal Server Error</h1>
+<p>Something went wrong while processing the request. The error has been
+logged{{if .ErrorNotifications}} and the administrator has been
+notified{{end}}. Please try again shortly.</p>
+{{end}}

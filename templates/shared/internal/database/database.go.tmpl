@@ -23,12 +23,17 @@ func isNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows)
 }
 
+// DefaultTimeout is the context timeout for database operations
+// initiated outside a request cycle.
+const DefaultTimeout = 3 * time.Second
+
 // Config holds the settings for the database connection pool.
 type Config struct {
-	DSN         string
+	DSN          string
 	MaxOpenConns int
 	MaxIdleConns int
 	MaxIdleTime  time.Duration
+	MaxLifetime  time.Duration
 }
 
 // New opens a connection pool to the database, verifies the connection
@@ -42,6 +47,7 @@ func New(ctx context.Context, cfg Config) (*sqlx.DB, error) {
 	db.SetMaxOpenConns(cfg.MaxOpenConns)
 	db.SetMaxIdleConns(cfg.MaxIdleConns)
 	db.SetConnMaxIdleTime(cfg.MaxIdleTime)
+	db.SetConnMaxLifetime(cfg.MaxLifetime)
 
 	return db, nil
 }

@@ -9,10 +9,20 @@ import (
 // template authors can add arbitrary keys alongside the defaults.
 type templateData map[string]any
 
-// render writes an HTML response by executing the named page template with
-// the given status code and data.
+// render writes an HTML response by executing the named page template
+// with the given status code and data.
 func (app *application) render(w http.ResponseWriter, r *http.Request, status int, page string, data templateData) {
-	err := app.templates.Render(w, status, page, data)
+	err := app.html.RenderBase(w, status, data, page)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
+
+// renderPartial writes an HTML response containing only the named
+// template from the given file, without the base layout. Useful for
+// returning fragments when working with HTMX, Hotwire or Unpoly.
+func (app *application) renderPartial(w http.ResponseWriter, r *http.Request, status int, name, file string, data templateData) {
+	err := app.html.Render(w, status, data, name, file)
 	if err != nil {
 		app.serverError(w, r, err)
 	}

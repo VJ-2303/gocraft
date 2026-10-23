@@ -14,10 +14,13 @@ func (app *application) routes() http.Handler {
 	mux := flow.New()
 
 	// Serve static files from the embedded assets.
-	mux.Handle("/static/", http.FileServerFS(app.assets), http.MethodGet)
+	mux.Handle("/static/", http.FileServerFS(app.static), http.MethodGet)
 
 	// Application routes.
 	mux.HandleFunc("/", app.home, http.MethodGet)
+{{if .BasicAuth}}
+	mux.HandleFunc("/restricted-basic-auth", app.restrictedBasicAuth, http.MethodGet)
+{{end}}
 
 	// Any other path is not found.
 	mux.NotFound = http.HandlerFunc(app.notFound)

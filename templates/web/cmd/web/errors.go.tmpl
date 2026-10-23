@@ -6,9 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"runtime/debug"
-{{- if .CustomErrorPages}}
-	"fmt"
-{{- end}}
 
 	"{{.ModulePath}}/internal/response"
 )
@@ -26,15 +23,24 @@ func (app *application) reportServerError(r *http.Request, err error) {
 	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
 {{- if .ErrorNotifications}}
 
-	app.backgroundTask(func() error {
-		data := app.defaultEmailData()
-		data["Method"] = method
-		data["URI"] = uri
-		data["Trace"] = trace
-		data["Error"] = err.Error()
+	// Notifications are only sent when a recipient address is
+	// configured; errors are always logged regardless.
+	if app.config.notifications.email != "" {
+		// The notification runs via the wait group directly rather than
+		// backgroundTask, so a failed send is logged without recursing
+		// back into reportServerError.
+		app.wg.Go(func() {
+			data := app.defaultEmailData()
+			data["Method"] = method
+			data["URI"] = uri
+			data["Trace"] = trace
+			data["Error"] = err.Error()
 
-		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
-	})
+			if sendErr := app.mailer.Send(app.config.notifications.email, data, "error-notification.tmpl"); sendErr != nil {
+				app.logger.Error("sending error notification", "error", sendErr)
+			}
+		})
+	}
 {{- end}}
 }
 
@@ -42,27 +48,27 @@ func (app *application) reportServerError(r *http.Request, err error) {
 // response to the client.
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	app.reportServerError(r, err)
-	app.clientError(w, r, http.StatusInternalServerError)
-}
-
-// clientError sends a specific status code to the client, rendering the
-// custom error page when enabled.
-func (app *application) clientError(w http.ResponseWriter, r *http.Request, status int) {
 {{- if .CustomErrorPages}}
 	data := app.defaultHTMLData(r)
-	data["Status"] = status
-	data["StatusText"] = http.StatusText(status)
-	data["Message"] = fmt.Sprintf("The request could not be completed: %s.", http.StatusText(status))
-
-	app.render(w, r, status, "error.tmpl", data)
+	data["ErrorNotifications"] = {{if .ErrorNotifications}}true{{else}}false{{end}}
+	app.render(w, r, http.StatusInternalServerError, "pages/errors/500.tmpl", data)
 {{- else}}
-	http.Error(w, http.StatusText(status), status)
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 {{- end}}
+}
+
+// clientError sends a specific status code to the client.
+func (app *application) clientError(w http.ResponseWriter, r *http.Request, status int) {
+	http.Error(w, http.StatusText(status), status)
 }
 
 // notFound sends a 404 Not Found response to the client.
 func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
-	app.clientError(w, r, http.StatusNotFound)
+{{- if .CustomErrorPages}}
+	app.render(w, r, http.StatusNotFound, "pages/errors/404.tmpl", app.defaultHTMLData(r))
+{{- else}}
+	http.Error(w, http.StatusText(http.StatusNotFound), http.StatusNotFound)
+{{- end}}
 }
 
 // badRequest sends a 400 Bad Request response for problems with the
@@ -72,11 +78,8 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 	if errors.As(err, &badRequestErr) {
 {{- if .CustomErrorPages}}
 		data := app.defaultHTMLData(r)
-		data["Status"] = http.StatusBadRequest
-		data["StatusText"] = http.StatusText(http.StatusBadRequest)
 		data["Message"] = badRequestErr.Message
-
-		app.render(w, r, http.StatusBadRequest, "error.tmpl", data)
+		app.render(w, r, http.StatusBadRequest, "pages/errors/400.tmpl", data)
 {{- else}}
 		http.Error(w, badRequestErr.Message, http.StatusBadRequest)
 {{- end}}
@@ -85,3 +88,16 @@ func (app *application) badRequest(w http.ResponseWriter, r *http.Request, err e
 
 	app.serverError(w, r, err)
 }
+{{- if .BasicAuth}}
+
+// basicAuthenticationRequired sends the 401 Unauthorized response and
+// challenge header for failed HTTP basic authentication.
+func (app *application) basicAuthenticationRequired(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
+{{- if .CustomErrorPages}}
+	app.render(w, r, http.StatusUnauthorized, "pages/errors/401.tmpl", app.defaultHTMLData(r))
+{{- else}}
+	http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+{{- end}}
+}
+{{- end}}

@@ -16,9 +16,6 @@ import (
 	"{{.ModulePath}}/internal/validator"
 )
 
-// accessTokenLifetime is how long a JWT remains valid.
-const accessTokenLifetime = 24 * time.Hour
-
 // registerUserInput holds the JSON payload for user registration.
 type registerUserInput struct {
 	Email    string `json:"email"`
@@ -87,7 +84,7 @@ func (app *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	data["To"] = input.Email
 	data["ActivationToken"] = plaintextToken
 
-	app.backgroundTask(func() error {
+	app.backgroundTask(r, func() error {
 		return app.mailer.Send(input.Email, data, "account-activation.tmpl")
 	})
 

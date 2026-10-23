@@ -10,5 +10,14 @@ import (
 func (app *application) home(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 
-	app.render(w, r, http.StatusOK, "home.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/home.tmpl", data)
 }
+{{- if .BasicAuth}}
+
+// restrictedBasicAuth is an example page protected by HTTP basic
+// authentication.
+func (app *application) restrictedBasicAuth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Write([]byte("This page is protected by HTTP basic authentication."))
+}
+{{- end}}
