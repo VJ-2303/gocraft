@@ -1,0 +1,24 @@
+package password
+
+import "slices"
+
+// commonPasswords lists passwords that must not be used for new
+// accounts, because they appear in every password cracking dictionary.
+// Edit this list freely — it is your code.
+var commonPasswords = []string{
+	"123456", "password", "12345678", "qwerty", "123456789", "12345",
+	"1234", "111111", "1234567", "dragon", "123123", "abc123",
+	"iloveyou", "admin", "welcome", "monkey", "login", "princess",
+	"qwertyuiop", "solo", "passw0rd", "starwars", "master", "hello",
+	"freedom", "whatever", "qazwsx", "trustno1", "batman", "letmein",
+	"football", "000000", "zaq12wsx", "password1", "qwerty123",
+	"summer", "winter", "spring", "autumn", "sunshine", "shadow",
+	"superman", "michael", "football1", "charlie", "donald",
+	"loveme", "access", "flower", "hottie", "lovemykids", "macOS",
+}
+
+// Common reports whether the plaintext password is in the list of common
+// passwords.
+func Common(plaintext string) bool {
+	return slices.Contains(commonPasswords, plaintext)
+}

@@ -55,6 +55,16 @@ func TestGateGenerate(t *testing.T) {
 			s.Router = spec.RouterGorilla
 			return s
 		}(),
+		// Exercises the full user accounts feature: signup, login,
+		// password reset, CSRF and session authentication.
+		"accountsapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.Database = spec.DBSQLite
+			s.Migrations = true
+			s.AccountsFull = true
+			s.ApplyDependencies()
+			return s
+		}(),
 		// Exercises every Plus platform feature together.
 		"plusapp": func() spec.ProjectSpec {
 			s := testSpec()

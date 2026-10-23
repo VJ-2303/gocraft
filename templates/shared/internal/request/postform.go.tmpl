@@ -1,0 +1,54 @@
+// Package request contains helpers for reading data from HTTP requests.
+package request
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/gorilla/schema"
+
+	"{{.ModulePath}}/internal/response"
+)
+
+// maxBytes limits the size of request bodies to 1MB, preventing
+// accidental or deliberate large payloads from exhausting server memory.
+const maxBytes = 1 << 20
+
+// decoder parses form data into structs using gorilla/schema. Unknown
+// keys are ignored so that new form fields can be added without breaking
+// older clients.
+var decoder = newDecoder()
+
+func newDecoder() *schema.Decoder {
+	d := schema.NewDecoder()
+	d.IgnoreUnknownKeys(true)
+	return d
+}
+
+// DecodePostForm fills dst with the parsed POST form data of the
+// request. The request body is limited to maxBytes; malformed or
+// oversized bodies return a response.BadRequestError.
+func DecodePostForm(r *http.Request, dst any) error {
+	err := r.ParseForm()
+	if err != nil {
+		return &response.BadRequestError{Message: "unable to parse form data"}
+	}
+
+	err = decoder.Decode(dst, r.PostForm)
+	if err != nil {
+		return &response.BadRequestError{Message: fmt.Sprintf("unable to decode form data: %v", err)}
+	}
+
+	return nil
+}
+
+// DecodeQueryString fills dst with the parsed query string values of the
+// request URL. Malformed values return a response.BadRequestError.
+func DecodeQueryString(r *http.Request, dst any) error {
+	err := decoder.Decode(dst, r.URL.Query())
+	if err != nil {
+		return &response.BadRequestError{Message: fmt.Sprintf("unable to decode query string: %v", err)}
+	}
+
+	return nil
+}

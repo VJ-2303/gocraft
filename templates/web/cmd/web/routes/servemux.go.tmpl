@@ -19,9 +19,28 @@ func (app *application) routes() http.Handler {
 
 	// Any other path is not found.
 	mux.HandleFunc("/", app.notFound)
+{{if .AccountsFull}}
 
+	// User account routes.
+	mux.HandleFunc("GET /restricted", app.requireAuthentication(app.restricted))
+	mux.HandleFunc("GET /signup", app.requireAnonymous(app.signup))
+	mux.HandleFunc("POST /signup", app.requireAnonymous(app.signupSubmit))
+	mux.HandleFunc("GET /login", app.requireAnonymous(app.login))
+	mux.HandleFunc("POST /login", app.requireAnonymous(app.loginSubmit))
+	mux.HandleFunc("POST /logout", app.requireAuthentication(app.logout))
+	mux.HandleFunc("GET /forgotten-password", app.requireAnonymous(app.forgottenPassword))
+	mux.HandleFunc("POST /forgotten-password", app.requireAnonymous(app.forgottenPasswordSubmit))
+	mux.HandleFunc("GET /forgotten-password-confirmation", app.requireAnonymous(app.forgottenPasswordConfirmation))
+	mux.HandleFunc("GET /password-reset/{token}", app.requireAnonymous(app.passwordReset))
+	mux.HandleFunc("POST /password-reset/{token}", app.requireAnonymous(app.passwordResetSubmit))
+	mux.HandleFunc("GET /password-reset-confirmation", app.requireAnonymous(app.passwordResetConfirmation))
+{{end}}
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
+{{- if .AccountsFull}}
+	handler = app.authenticate(handler)
+	handler = app.preventCSRF(handler)
+{{- end}}
 {{- if .Sessions}}
 	handler = app.sessionManager.LoadAndSave(handler)
 {{- end}}
@@ -35,3 +54,11 @@ func (app *application) routes() http.Handler {
 
 	return handler
 }
+
+{{- if .AccountsFull}}
+
+// pathParam extracts a named path parameter from the request.
+func pathParam(r *http.Request, name string) string {
+	return r.PathValue(name)
+}
+{{- end}}

@@ -235,6 +235,10 @@ func run() error {
 {{- if .NeedsMailer}}
 		mailer: mailer,
 {{- end}}
+{{- if .AccountsFull}}
+		users:          database.UserModel{DB: db},
+		passwordResets: database.PasswordResetModel{DB: db},
+{{- end}}
 	}
 
 	// Initialize a new http.Server instance with sensible timeout settings.
@@ -384,6 +388,10 @@ type application struct {
 {{- end}}
 {{- if .NeedsMailer}}
 	mailer mailer.Mailer
+{{- end}}
+{{- if .AccountsFull}}
+	users          database.UserModel
+	passwordResets database.PasswordResetModel
 {{- end}}
 	wg        sync.WaitGroup
 }

@@ -1,0 +1,366 @@
+// The application's user account handlers: signup, login, logout and the
+// password reset flow.
+package main
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"fmt"
+	"net/http"
+	"time"
+
+	"{{.ModulePath}}/internal/password"
+	"{{.ModulePath}}/internal/request"
+	"{{.ModulePath}}/internal/validator"
+)
+
+// credentialsForm holds the email and password submitted through the
+// signup, login and password reset forms.
+type credentialsForm struct {
+	Email                string `schema:"email"`
+	Password             string `schema:"password"`
+	validator.Validator  `schema:"-"`
+}
+
+// validate checks the form fields against the password policy: 8 to 72
+// bytes (bcrypt truncates beyond 72), not blank, and not one of the
+// common passwords. Edit these rules freely.
+func (f *credentialsForm) validate() {
+	f.CheckField(validator.NotBlank(f.Email), "email", "This field cannot be blank")
+	f.CheckField(validator.IsEmail(f.Email), "email", "This field must be a valid email address")
+	f.CheckField(validator.NotBlank(f.Password), "password", "This field cannot be blank")
+	f.CheckField(validator.MinChars(f.Password, 8), "password", "This field must be at least 8 characters long")
+	f.CheckField(validator.MaxChars(f.Password, 72), "password", "This field must be at most 72 characters long")
+	f.CheckField(!password.Common(f.Password), "password", "This password is too common and cannot be used")
+}
+
+// restricted is an example page that only authenticated users may visit.
+func (app *application) restricted(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+
+	app.render(w, r, http.StatusOK, "restricted.tmpl", data)
+}
+
+// signup displays the signup form.
+func (app *application) signup(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+	data["Form"] = credentialsForm{}
+
+	app.render(w, r, http.StatusOK, "signup.tmpl", data)
+}
+
+// signupSubmit validates the submitted credentials and creates a new
+// user account, logging the user in on success.
+func (app *application) signupSubmit(w http.ResponseWriter, r *http.Request) {
+	var form credentialsForm
+
+	err := request.DecodePostForm(r, &form)
+	if err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	form.validate()
+
+	// If the email is already taken, add a field error.
+	_, found, err := app.users.GetByEmail(form.Email)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if found {
+		form.AddFieldError("email", "Email address is already in use")
+	}
+
+	if !form.Valid() {
+		data := app.defaultHTMLData(r)
+		data["Form"] = form
+
+		app.render(w, r, http.StatusUnprocessableEntity, "signup.tmpl", data)
+		return
+	}
+
+	hashedPassword, err := password.Hash(form.Password)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	id, err := app.users.Insert(form.Email, hashedPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Log the new user in immediately after signup.
+	err = app.sessionManager.RenewToken(r.Context())
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	app.sessionManager.Put(r.Context(), "authenticatedUserID", int(id))
+
+	http.Redirect(w, r, "/restricted", http.StatusSeeOther)
+}
+
+// login displays the login form.
+func (app *application) login(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+	data["Form"] = credentialsForm{}
+
+	app.render(w, r, http.StatusOK, "login.tmpl", data)
+}
+
+// loginSubmit validates the submitted credentials and logs the user in,
+// redirecting to the page they originally requested when applicable.
+func (app *application) loginSubmit(w http.ResponseWriter, r *http.Request) {
+	var form credentialsForm
+
+	err := request.DecodePostForm(r, &form)
+	if err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	form.CheckField(validator.NotBlank(form.Email), "email", "This field cannot be blank")
+	form.CheckField(validator.IsEmail(form.Email), "email", "This field must be a valid email address")
+	form.CheckField(validator.NotBlank(form.Password), "password", "This field cannot be blank")
+
+	if !form.Valid() {
+		data := app.defaultHTMLData(r)
+		data["Form"] = form
+
+		app.render(w, r, http.StatusUnprocessableEntity, "login.tmpl", data)
+		return
+	}
+
+	user, found, err := app.users.GetByEmail(form.Email)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	matches, err := password.Matches(form.Password, user.HashedPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Use the same error for unknown emails and wrong passwords, to avoid
+	// leaking which email addresses have accounts.
+	if !found || !matches {
+		form.AddFieldError("email", "Email or password is incorrect")
+
+		data := app.defaultHTMLData(r)
+		data["Form"] = form
+
+		app.render(w, r, http.StatusUnprocessableEntity, "login.tmpl", data)
+		return
+	}
+
+	// Regenerate the session token at each privilege change.
+	err = app.sessionManager.RenewToken(r.Context())
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	app.sessionManager.Put(r.Context(), "authenticatedUserID", int(user.ID))
+
+	// Redirect the user to the page they originally requested, if any,
+	// removing the value from the session so it is used only once.
+	redirect := app.sessionManager.PopString(r.Context(), "redirectPathAfterLogin")
+	if redirect == "" {
+		redirect = "/restricted"
+	}
+
+	http.Redirect(w, r, redirect, http.StatusSeeOther)
+}
+
+// logout removes the authenticated user from the session and redirects
+// to the home page.
+func (app *application) logout(w http.ResponseWriter, r *http.Request) {
+	err := app.sessionManager.RenewToken(r.Context())
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	app.sessionManager.Remove(r.Context(), "authenticatedUserID")
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// emailForm holds an email address submitted through the forgotten
+// password form.
+type emailForm struct {
+	Email               string `schema:"email"`
+	validator.Validator `schema:"-"`
+}
+
+// forgottenPassword displays the email form for requesting a password
+// reset link.
+func (app *application) forgottenPassword(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+	data["Form"] = emailForm{}
+
+	app.render(w, r, http.StatusOK, "forgotten-password.tmpl", data)
+}
+
+// forgottenPasswordSubmit validates the email address and, when an
+// account exists, emails a password reset link containing a single-use
+// token. The user is always redirected to the confirmation page, so the
+// response does not reveal whether the email address has an account.
+func (app *application) forgottenPasswordSubmit(w http.ResponseWriter, r *http.Request) {
+	var form emailForm
+
+	err := request.DecodePostForm(r, &form)
+	if err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	form.CheckField(validator.NotBlank(form.Email), "email", "This field cannot be blank")
+	form.CheckField(validator.IsEmail(form.Email), "email", "This field must be a valid email address")
+
+	if !form.Valid() {
+		data := app.defaultHTMLData(r)
+		data["Form"] = form
+
+		app.render(w, r, http.StatusUnprocessableEntity, "forgotten-password.tmpl", data)
+		return
+	}
+
+	user, found, err := app.users.GetByEmail(form.Email)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	if found {
+		// Generate a random plaintext token and store only its SHA-256
+		// hash; the plaintext goes into the emailed reset link.
+		plaintextToken := rand.Text()
+
+		hash := sha256.Sum256([]byte(plaintextToken))
+
+		err = app.passwordResets.Insert(user.ID, hash[:], 24*time.Hour)
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+
+		data := app.defaultEmailData()
+		data["To"] = user.Email
+		data["ResetURL"] = fmt.Sprintf("%s/password-reset/%s", app.config.baseURL, plaintextToken)
+
+		app.backgroundTask(func() error {
+			return app.mailer.Send(user.Email, data, "forgot-password.tmpl")
+		})
+	}
+
+	http.Redirect(w, r, "/forgotten-password-confirmation", http.StatusSeeOther)
+}
+
+// forgottenPasswordConfirmation displays the confirmation page shown
+// after a password reset email is (potentially) sent.
+func (app *application) forgottenPasswordConfirmation(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+
+	app.render(w, r, http.StatusOK, "forgotten-password-confirmation.tmpl", data)
+}
+
+// newPasswordForm holds the new password submitted through the password
+// reset form.
+type newPasswordForm struct {
+	NewPassword         string `schema:"newPassword"`
+	validator.Validator `schema:"-"`
+}
+
+// passwordReset validates the reset token from the emailed link and, if
+// it is valid, displays the new password form.
+func (app *application) passwordReset(w http.ResponseWriter, r *http.Request) {
+	hash := sha256.Sum256([]byte(pathParam(r, "token")))
+
+	_, found, err := app.passwordResets.Get(hash[:])
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if !found {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	data := app.defaultHTMLData(r)
+	data["Form"] = newPasswordForm{}
+	data["Token"] = pathParam(r, "token")
+
+	app.render(w, r, http.StatusOK, "password-reset.tmpl", data)
+}
+
+// passwordResetSubmit validates and stores the new password, deleting
+// all of the user's reset tokens afterwards.
+func (app *application) passwordResetSubmit(w http.ResponseWriter, r *http.Request) {
+	hash := sha256.Sum256([]byte(pathParam(r, "token")))
+
+	reset, found, err := app.passwordResets.Get(hash[:])
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+	if !found {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	var form newPasswordForm
+
+	err = request.DecodePostForm(r, &form)
+	if err != nil {
+		app.clientError(w, r, http.StatusBadRequest)
+		return
+	}
+
+	form.CheckField(validator.NotBlank(form.NewPassword), "newPassword", "This field cannot be blank")
+	form.CheckField(validator.MinChars(form.NewPassword, 8), "newPassword", "This field must be at least 8 characters long")
+	form.CheckField(validator.MaxChars(form.NewPassword, 72), "newPassword", "This field must be at most 72 characters long")
+	form.CheckField(!password.Common(form.NewPassword), "newPassword", "This password is too common and cannot be used")
+
+	if !form.Valid() {
+		data := app.defaultHTMLData(r)
+		data["Form"] = form
+		data["Token"] = pathParam(r, "token")
+
+		app.render(w, r, http.StatusUnprocessableEntity, "password-reset.tmpl", data)
+		return
+	}
+
+	hashedPassword, err := password.Hash(form.NewPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	err = app.users.UpdateHashedPassword(reset.UserID, hashedPassword)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	// Every outstanding reset token is deleted, so a shared or stolen
+	// link stops working the moment the password changes.
+	err = app.passwordResets.Delete(reset.UserID)
+	if err != nil {
+		app.serverError(w, r, err)
+		return
+	}
+
+	http.Redirect(w, r, "/password-reset-confirmation", http.StatusSeeOther)
+}
+
+// passwordResetConfirmation displays the confirmation page shown after a
+// successful password change.
+func (app *application) passwordResetConfirmation(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+
+	app.render(w, r, http.StatusOK, "password-reset-confirmation.tmpl", data)
+}

@@ -1,0 +1,39 @@
+// Package password provides helpers for securely hashing and verifying
+// plaintext passwords using bcrypt.
+package password
+
+import (
+	"errors"
+	"fmt"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+// cost is the bcrypt cost factor. Higher values are slower to compute,
+// which increases the work factor for brute-force attacks. Bcrypt
+// truncates input beyond 72 bytes, which is why the signup validation
+// caps passwords at that length.
+const cost = 12
+
+// Hash returns the bcrypt hash of the plaintext password.
+func Hash(plaintext string) ([]byte, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(plaintext), cost)
+	if err != nil {
+		return nil, fmt.Errorf("hashing password: %w", err)
+	}
+	return hashedPassword, nil
+}
+
+// Matches reports whether the plaintext password matches the stored
+// bcrypt hash. It returns a nil error for both a match and a mismatch;
+// errors are reserved for malformed hashes and other real failures.
+func Matches(plaintext string, hashedPassword []byte) (bool, error) {
+	err := bcrypt.CompareHashAndPassword(hashedPassword, []byte(plaintext))
+	if err != nil {
+		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
+			return false, nil
+		}
+		return false, fmt.Errorf("comparing password and hash: %w", err)
+	}
+	return true, nil
+}

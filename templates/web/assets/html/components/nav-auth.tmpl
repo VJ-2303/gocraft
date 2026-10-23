@@ -1,0 +1,15 @@
+{{define "nav"}}
+<nav>
+	<a href="/">Home</a>
+	{{if .AuthenticatedUser}}
+		<span>{{.AuthenticatedUser.Email}}</span>
+		<form action="/logout" method="POST" style="display: inline">
+			<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+			<button type="submit">Log out</button>
+		</form>
+	{{else}}
+		<a href="/signup">Sign up</a>
+		<a href="/login">Log in</a>
+	{{end}}
+</nav>
+{{end}}

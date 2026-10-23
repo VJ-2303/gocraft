@@ -36,6 +36,8 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/funcs/funcs.go.tmpl", OutPath: "internal/funcs/funcs.go", Cond: true},
 		{Template: "shared/internal/response/json.go.tmpl", OutPath: "internal/response/json.go", Cond: true},
 		{Template: "shared/internal/database/database.go.tmpl", OutPath: "internal/database/database.go", Cond: rsp.NeedsDB},
+		{Template: "shared/internal/database/users.go.tmpl", OutPath: "internal/database/users.go", Cond: rsp.HasAuth},
+		{Template: "shared/internal/database/password_resets.go.tmpl", OutPath: "internal/database/password_resets.go", Cond: rsp.AccountsFull},
 		{Template: "shared/internal/env/env.go.tmpl", OutPath: "internal/env/env.go", Cond: rsp.ConfigSource == spec.ConfigEnv},
 		{Template: "shared/internal/log/colorized.go.tmpl", OutPath: "internal/log/colorized.go", Cond: rsp.LogFormat == spec.LogColorized},
 
@@ -46,12 +48,21 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/assets/migrations/000001_init.down.sql", OutPath: "assets/migrations/000001_init.down.sql", Cond: rsp.Migrations, Copy: true},
 		{Template: "shared/assets/migrations/000002_create_sessions_table.up.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.up.sql", Cond: rsp.Sessions},
 		{Template: "shared/assets/migrations/000002_create_sessions_table.down.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.down.sql", Cond: rsp.Sessions},
+		{Template: "shared/assets/migrations/000003_create_users_table.up.sql.tmpl", OutPath: "assets/migrations/000003_create_users_table.up.sql", Cond: rsp.HasAuth},
+		{Template: "shared/assets/migrations/000003_create_users_table.down.sql.tmpl", OutPath: "assets/migrations/000003_create_users_table.down.sql", Cond: rsp.HasAuth},
+		{Template: "shared/assets/migrations/000004_create_password_resets_table.up.sql.tmpl", OutPath: "assets/migrations/000004_create_password_resets_table.up.sql", Cond: rsp.AccountsFull},
+		{Template: "shared/assets/migrations/000004_create_password_resets_table.down.sql.tmpl", OutPath: "assets/migrations/000004_create_password_resets_table.down.sql", Cond: rsp.AccountsFull},
 
 		{Template: "shared/internal/cookies/cookies.go.tmpl", OutPath: "internal/cookies/cookies.go", Cond: rsp.SecureCookies},
 		{Template: "shared/internal/mailer/mailer.go.tmpl", OutPath: "internal/mailer/mailer.go", Cond: rsp.NeedsMailer},
+		{Template: "shared/internal/password/hash.go.tmpl", OutPath: "internal/password/hash.go", Cond: rsp.HasAuth},
+		{Template: "shared/internal/password/common.go.tmpl", OutPath: "internal/password/common.go", Cond: rsp.HasAuth},
+		{Template: "shared/internal/validator/validator.go.tmpl", OutPath: "internal/validator/validator.go", Cond: rsp.HasAuth},
+		{Template: "shared/internal/request/postform.go.tmpl", OutPath: "internal/request/postform.go", Cond: rsp.AccountsFull},
 
 		{Template: "shared/assets/emails/example.tmpl", OutPath: "assets/emails/example.tmpl", Cond: rsp.NeedsMailer, Copy: true},
 		{Template: "shared/assets/emails/error-notification.tmpl", OutPath: "assets/emails/error-notification.tmpl", Cond: rsp.ErrorNotifications, Copy: true},
+		{Template: "web/assets/emails/forgot-password.tmpl", OutPath: "assets/emails/forgot-password.tmpl", Cond: rsp.AccountsFull, Copy: true},
 	}
 
 	files = append(files, appFiles(rsp)...)
@@ -83,15 +94,25 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 
 		{Template: "web/assets/static/css/main.css", OutPath: "assets/static/css/main.css", Cond: true, Copy: true},
 		{Template: "web/assets/html/base.tmpl", OutPath: "assets/html/base.tmpl", Cond: true, Copy: true},
-		{Template: "web/assets/html/components/nav.tmpl", OutPath: "assets/html/components/nav.tmpl", Cond: true, Copy: true},
+		{Template: "web/assets/html/components/nav-auth.tmpl", OutPath: "assets/html/components/nav.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/components/nav.tmpl", OutPath: "assets/html/components/nav.tmpl", Cond: !rsp.AccountsFull, Copy: true},
 		{Template: "web/assets/html/pages/home.tmpl", OutPath: "assets/html/pages/home.tmpl", Cond: true, Copy: true},
 		{Template: "web/assets/html/pages/error.tmpl", OutPath: "assets/html/pages/error.tmpl", Cond: rsp.CustomErrorPages, Copy: true},
+		{Template: "web/assets/html/pages/signup.tmpl", OutPath: "assets/html/pages/signup.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/login.tmpl", OutPath: "assets/html/pages/login.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/restricted.tmpl", OutPath: "assets/html/pages/restricted.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/forgotten-password.tmpl", OutPath: "assets/html/pages/forgotten-password.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/forgotten-password-confirmation.tmpl", OutPath: "assets/html/pages/forgotten-password-confirmation.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/password-reset.tmpl", OutPath: "assets/html/pages/password-reset.tmpl", Cond: rsp.AccountsFull, Copy: true},
+		{Template: "web/assets/html/pages/password-reset-confirmation.tmpl", OutPath: "assets/html/pages/password-reset-confirmation.tmpl", Cond: rsp.AccountsFull, Copy: true},
 
 		{Template: "web/cmd/web/main.go.tmpl", OutPath: "cmd/web/main.go", Cond: true},
 		{Template: "web/cmd/web/middleware.go.tmpl", OutPath: "cmd/web/middleware.go", Cond: true},
 		{Template: "web/cmd/web/handlers.go.tmpl", OutPath: "cmd/web/handlers.go", Cond: true},
 		{Template: "web/cmd/web/templates.go.tmpl", OutPath: "cmd/web/templates.go", Cond: true},
 		{Template: "web/cmd/web/helpers.go.tmpl", OutPath: "cmd/web/helpers.go", Cond: true},
+		{Template: "web/cmd/web/handlers-auth.go.tmpl", OutPath: "cmd/web/handlers-auth.go", Cond: rsp.AccountsFull},
+		{Template: "web/cmd/web/context.go.tmpl", OutPath: "cmd/web/context.go", Cond: rsp.AccountsFull},
 	}
 }
 

@@ -65,6 +65,7 @@ var requireVersions = map[string]string{
 	"github.com/alexedwards/scs/v2":   "v2.9.0",
 	"github.com/justinas/nosurf":      "v1.2.0",
 	"github.com/golang-jwt/jwt/v5":    "v5.3.1",
+	"github.com/gorilla/schema":       "v1.4.1",
 	"github.com/wneessen/go-mail":     "v0.8.1",
 	"golang.org/x/crypto":             "v0.58.0",
 }
