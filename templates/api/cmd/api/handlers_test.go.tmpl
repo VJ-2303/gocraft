@@ -1,0 +1,36 @@
+// Handler tests for the API.
+package main
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestHealthcheck(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, _, body := ts.get(t, "/v1/healthcheck")
+	if status != http.StatusOK {
+		t.Errorf("want status %d, got %d", http.StatusOK, status)
+	}
+	if !strings.Contains(body, `"status":"available"`) {
+		t.Errorf("want status available in body, got %q", body)
+	}
+}
+
+func TestHealthcheckJSONShape(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	_, _, body := ts.get(t, "/v1/healthcheck")
+
+	var got struct {
+		Status string `json:"status"`
+	}
+	decodeJSON(t, body, &got)
+	if got.Status != "available" {
+		t.Errorf("want status %q, got %q", "available", got.Status)
+	}
+}

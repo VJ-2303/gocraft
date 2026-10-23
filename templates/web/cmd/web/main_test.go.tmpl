@@ -1,0 +1,207 @@
+// Standardized test helpers for the application's handler tests.
+package main
+
+import (
+	"context"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"strings"
+	"testing"
+{{- if .Sessions}}
+	"time"
+{{- end}}
+{{- if .Sessions}}
+	"github.com/alexedwards/scs/v2"
+	"github.com/alexedwards/scs/v2/memstore"
+{{- end}}
+{{- if .NeedsDB}}
+	"github.com/jmoiron/sqlx"
+
+	"{{.ModulePath}}/internal/database"
+{{- end}}
+	"{{.ModulePath}}/assets"
+	"{{.ModulePath}}/internal/funcs"
+	"{{.ModulePath}}/internal/response"
+)
+
+// newTestApplication returns an application instance populated with the
+// dependencies needed by handler tests: a discarding logger, the real
+// embedded templates and assets, and a fresh test database when one is
+// configured.
+func newTestApplication(t *testing.T) *application {
+	t.Helper()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	templateRenderer, err := response.NewHTMLRenderer(assets.HTML, funcs.All(),
+	{{- range .WebPages}}
+		"{{.}}",
+	{{- end}}
+	)
+	if err != nil {
+		t.Fatalf("initializing template renderer: %v", err)
+	}
+
+	cfg := config{
+		baseURL:  "http://test.example",
+		httpPort: 6633,
+	}
+
+	app := &application{
+		config:    cfg,
+		logger:    logger,
+		assets:    assets.FS,
+		templates: templateRenderer,
+	}
+{{- if .NeedsDB}}
+
+	db := newTestDB(t)
+	app.db = db
+{{- end}}
+{{- if .Sessions}}
+
+	// The session manager uses the in-memory store for tests, so no
+	// database or cleanup is needed for session data.
+	sessionManager := scs.New()
+	sessionManager.Lifetime = time.Hour
+	sessionManager.Cookie.Secure = false
+	sessionManager.Cookie.HttpOnly = true
+	sessionManager.Cookie.SameSite = http.SameSiteLaxMode
+	sessionManager.Cookie.Name = "session_test"
+	sessionManager.Store = memstore.New()
+	app.sessionManager = sessionManager
+{{- end}}
+{{- if .AccountsFull}}
+
+	app.users = database.UserModel{DB: app.db}
+	app.passwordResets = database.PasswordResetModel{DB: app.db}
+{{- end}}
+
+	return app
+}
+{{if and .NeedsDB (eq .Dialect "sqlite")}}
+
+// newTestDB opens a temporary SQLite database, applies the migrations,
+// and registers cleanup to close and remove it when the test finishes.
+func newTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+
+	file, err := os.CreateTemp("", "test-db-*.sqlite")
+	if err != nil {
+		t.Fatalf("creating temp database file: %v", err)
+	}
+	name := file.Name()
+	file.Close()
+
+	db, err := database.New(context.Background(), database.Config{
+		DSN:         name + "?_pragma=foreign_keys(1)",
+		MaxOpenConns: 1,
+		MaxIdleConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("opening test database: %v", err)
+	}
+
+	err = database.MigrateUp(db, assets.Migrations)
+	if err != nil {
+		t.Fatalf("running migrations: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+		os.Remove(name)
+	})
+
+	return db
+}
+{{else if .NeedsDB}}
+
+// newTestDB returns nil for dialects that need a running database
+// server; tests that require the database skip themselves instead.
+func newTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+	t.Skipf("database tests are skipped for the %s dialect; they need a running database server", "{{.Dialect}}")
+	return nil
+}
+{{end}}
+
+// testServer wraps an httptest.Server with a client that carries a
+// cookie jar, so session-based flows can be exercised end to end.
+type testServer struct {
+	*httptest.Server
+}
+
+// newTestServer starts a test server serving the application's routes.
+func newTestServer(t *testing.T, app *application) *testServer {
+	t.Helper()
+
+	ts := httptest.NewServer(app.routes())
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("creating cookie jar: %v", err)
+	}
+	ts.Client().Jar = jar
+
+	// Return the first response without following redirects, so tests
+	// can assert on redirect status codes and Location headers.
+	ts.Client().CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		return http.ErrUseLastResponse
+	}
+
+	t.Cleanup(ts.Close)
+
+	return &testServer{ts}
+}
+
+// get performs a GET request against the test server and returns the
+// response status, headers and body.
+func (ts *testServer) get(t *testing.T, urlPath string) (int, http.Header, string) {
+	t.Helper()
+
+	rs, err := ts.Client().Get(ts.URL + urlPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}
+
+// postForm performs a POST request with form data against the test
+// server and returns the response status, headers and body. The request
+// carries an Origin header, like a real browser form submission, so CSRF
+// same-origin checks pass.
+func (ts *testServer) postForm(t *testing.T, urlPath string, form url.Values) (int, http.Header, string) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPost, ts.URL+urlPath, strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", ts.URL)
+
+	rs, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("POST %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}

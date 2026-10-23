@@ -1,0 +1,128 @@
+// Tests for the user account flows.
+package main
+
+import (
+	"crypto/sha256"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestRegisterUserValidation(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	tests := []struct {
+		name   string
+		body   string
+		status int
+	}{
+		{"invalid JSON", `{"email":`, http.StatusBadRequest},
+		{"unknown field", `{"email":"a@b.com","password":"supersecret1","extra":1}`, http.StatusBadRequest},
+		{"blank email", `{"email":"","password":"supersecret1"}`, http.StatusUnprocessableEntity},
+		{"invalid email", `{"email":"not-an-email","password":"supersecret1"}`, http.StatusUnprocessableEntity},
+		{"short password", `{"email":"a@b.com","password":"short"}`, http.StatusUnprocessableEntity},
+		{"common password", `{"email":"a@b.com","password":"password"}`, http.StatusUnprocessableEntity},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			status, _, _ := ts.postJSON(t, "/v1/users", tt.body)
+			if status != tt.status {
+				t.Errorf("want status %d, got %d", tt.status, status)
+			}
+		})
+	}
+}
+
+func TestAuthenticationFlow(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	// Register a new account.
+	status, _, body := ts.postJSON(t, "/v1/users", `{"email":"alice@example.com","password":"supersecret1"}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("want status %d for registration, got %d (body %q)", http.StatusAccepted, status, body)
+	}
+
+	// Login must fail before activation.
+	status, _, _ = ts.postJSON(t, "/v1/tokens/authentication", `{"email":"alice@example.com","password":"supersecret1"}`)
+	if status != http.StatusUnauthorized {
+		t.Errorf("want status %d before activation, got %d", http.StatusUnauthorized, status)
+	}
+
+	// Insert a known activation token directly, standing in for the
+	// emailed one.
+	const plaintextToken = "test-activation-token-12345"
+	err := app.activationTokens.Insert(1, sha256Sum(plaintextToken), time.Hour)
+	if err != nil {
+		t.Fatalf("inserting activation token: %v", err)
+	}
+
+	status, _, body = ts.putJSON(t, "/v1/tokens/activation", `{"token":"`+plaintextToken+`"}`)
+	if status != http.StatusOK {
+		t.Fatalf("want status %d for activation, got %d (body %q)", http.StatusOK, status, body)
+	}
+
+	// The activation token must be single-use.
+	status, _, _ = ts.putJSON(t, "/v1/tokens/activation", `{"token":"`+plaintextToken+`"}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("want status %d for token reuse, got %d", http.StatusUnprocessableEntity, status)
+	}
+
+	// Login issues a bearer token.
+	status, _, body = ts.postJSON(t, "/v1/tokens/authentication", `{"email":"alice@example.com","password":"supersecret1"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("want status %d for login, got %d (body %q)", http.StatusCreated, status, body)
+	}
+
+	var tokenResp struct {
+		AuthenticationToken string `json:"authentication_token"`
+	}
+	decodeJSON(t, body, &tokenResp)
+	if tokenResp.AuthenticationToken == "" {
+		t.Fatalf("no authentication token in response %q", body)
+	}
+
+	// The protected endpoint accepts the token.
+	status, _, body = ts.getWithToken(t, "/v1/me", tokenResp.AuthenticationToken)
+	if status != http.StatusOK {
+		t.Errorf("want status %d for /v1/me with token, got %d", http.StatusOK, status)
+	}
+	if !strings.Contains(body, "alice@example.com") {
+		t.Errorf("want the account email in %q", body)
+	}
+
+	// And rejects requests without or with a garbage token.
+	status, _, _ = ts.get(t, "/v1/me")
+	if status != http.StatusUnauthorized {
+		t.Errorf("want status %d without a token, got %d", http.StatusUnauthorized, status)
+	}
+	status, _, _ = ts.getWithToken(t, "/v1/me", "not.a.token")
+	if status != http.StatusUnauthorized {
+		t.Errorf("want status %d with a garbage token, got %d", http.StatusUnauthorized, status)
+	}
+}
+
+func TestRegisterDuplicateEmail(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	ts.postJSON(t, "/v1/users", `{"email":"alice@example.com","password":"supersecret1"}`)
+
+	status, _, body := ts.postJSON(t, "/v1/users", `{"email":"alice@example.com","password":"supersecret1"}`)
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("want status %d for a duplicate email, got %d", http.StatusUnprocessableEntity, status)
+	}
+	if !strings.Contains(body, "already in use") {
+		t.Errorf("want the duplicate email error in %q", body)
+	}
+}
+
+// sha256Sum returns the SHA-256 hash of s, matching how activation
+// tokens are stored.
+func sha256Sum(s string) []byte {
+	sum := sha256.Sum256([]byte(s))
+	return sum[:]
+}

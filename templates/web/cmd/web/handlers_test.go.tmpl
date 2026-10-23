@@ -1,0 +1,58 @@
+// Handler tests for the application.
+package main
+
+import (
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestHomeHandler(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, _, body := ts.get(t, "/")
+	if status != http.StatusOK {
+		t.Errorf("want status %d, got %d", http.StatusOK, status)
+	}
+	if !contains(body, "It works!") {
+		t.Errorf("want body to contain the home page marker, got %q", body)
+	}
+}
+
+func TestStaticFiles(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, headers, _ := ts.get(t, "/static/css/main.css")
+	if status != http.StatusOK {
+		t.Errorf("want status %d for static files, got %d", http.StatusOK, status)
+	}
+	if got := headers.Get("Content-Type"); got != "text/css; charset=utf-8" {
+		t.Errorf("want text/css content type, got %q", got)
+	}
+}
+
+func TestNotFound(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, _, body := ts.get(t, "/no-such-page")
+	if status != http.StatusNotFound {
+		t.Errorf("want status %d, got %d", http.StatusNotFound, status)
+	}
+{{- if .CustomErrorPages}}
+	if !contains(body, "been moved or deleted") {
+		t.Errorf("want custom error page body, got %q", body)
+	}
+{{- else}}
+	if !contains(body, "Not Found") {
+		t.Errorf("want Not Found in body, got %q", body)
+	}
+{{- end}}
+}
+
+// contains reports whether s includes substr.
+func contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}

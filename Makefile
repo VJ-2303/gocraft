@@ -59,8 +59,8 @@ gate:
 	@NMB_GATE_DIR=/tmp/nmb-gate go test -count=1 -run TestGateGenerate ./internal/generator/
 	@set -e; for dir in /tmp/nmb-gate/*/; do \
 		echo "== verifying $$(basename $$dir) =="; \
-		(cd $$dir && go build ./... && go vet ./...); \
+		(cd $$dir && go build ./... && go vet ./... && go test ./...); \
 	done; \
-	echo "gate: all generated codebases build and vet cleanly"
+	echo "gate: all generated codebases build, vet and test cleanly"
 
 .PHONY: help audit test test/cover upgradeable tidy build run run/live gate

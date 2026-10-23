@@ -119,6 +119,9 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "web/cmd/web/helpers.go.tmpl", OutPath: "cmd/web/helpers.go", Cond: true},
 		{Template: "web/cmd/web/handlers-auth.go.tmpl", OutPath: "cmd/web/handlers-auth.go", Cond: rsp.AccountsFull},
 		{Template: "web/cmd/web/context.go.tmpl", OutPath: "cmd/web/context.go", Cond: rsp.AccountsFull},
+		{Template: "web/cmd/web/main_test.go.tmpl", OutPath: "cmd/web/main_test.go", Cond: rsp.Tests},
+		{Template: "web/cmd/web/handlers_test.go.tmpl", OutPath: "cmd/web/handlers_test.go", Cond: rsp.Tests},
+		{Template: "web/cmd/web/handlers_auth_test.go.tmpl", OutPath: "cmd/web/handlers_auth_test.go", Cond: rsp.Tests && rsp.AccountsFull},
 	}
 }
 
@@ -133,5 +136,8 @@ func apiFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "api/cmd/api/helpers.go.tmpl", OutPath: "cmd/api/helpers.go", Cond: true},
 		{Template: "api/cmd/api/handlers-auth.go.tmpl", OutPath: "cmd/api/handlers-auth.go", Cond: rsp.AccountsJWT},
 		{Template: "api/cmd/api/context.go.tmpl", OutPath: "cmd/api/context.go", Cond: rsp.AccountsJWT},
+		{Template: "api/cmd/api/main_test.go.tmpl", OutPath: "cmd/api/main_test.go", Cond: rsp.Tests},
+		{Template: "api/cmd/api/handlers_test.go.tmpl", OutPath: "cmd/api/handlers_test.go", Cond: rsp.Tests},
+		{Template: "api/cmd/api/handlers_auth_test.go.tmpl", OutPath: "cmd/api/handlers_auth_test.go", Cond: rsp.Tests && rsp.AccountsJWT},
 	}
 }

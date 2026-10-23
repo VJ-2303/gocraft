@@ -1,0 +1,236 @@
+// Standardized test helpers for the API's handler tests.
+package main
+
+import (
+	"context"
+	"encoding/json/v2"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+{{- if .AccountsJWT}}
+	"{{.ModulePath}}/internal/auth"
+{{- end}}
+{{- if .NeedsDB}}
+	"github.com/jmoiron/sqlx"
+
+	"{{.ModulePath}}/internal/database"
+{{- end}}
+{{- if .NeedsMailer}}
+	"{{.ModulePath}}/assets"
+	"{{.ModulePath}}/internal/mailer"
+{{- end}}
+)
+
+// newTestApplication returns an application instance populated with the
+// dependencies needed by handler tests: a discarding logger and a fresh
+// test database when one is configured.
+func newTestApplication(t *testing.T) *application {
+	t.Helper()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	cfg := config{
+		baseURL:  "http://test.example",
+		httpPort: 6633,
+	}
+
+	app := &application{
+		config: cfg,
+		logger: logger,
+	}
+{{- if .NeedsDB}}
+
+	app.db = newTestDB(t)
+{{- end}}
+{{- if .NeedsMailer}}
+
+	// The mailer points at an unroutable local port; outbound email in
+	// tests is expected to fail and is only logged (and discarded).
+	m, err := mailer.New(logger, assets.EmailFiles, "127.0.0.1", 1, "", "", "test@example.com")
+	if err != nil {
+		t.Fatalf("initializing test mailer: %v", err)
+	}
+	app.mailer = m
+{{- end}}
+{{- if .AccountsJWT}}
+
+	// The test secret is a fixed base64-encoded 32-byte key.
+	tokenizer, err := auth.NewTokenizer("MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=")
+	if err != nil {
+		t.Fatalf("initializing tokenizer: %v", err)
+	}
+	app.tokenizer = tokenizer
+	app.users = database.UserModel{DB: app.db}
+	app.activationTokens = database.ActivationTokenModel{DB: app.db}
+{{- end}}
+
+	return app
+}
+{{if and .NeedsDB (eq .Dialect "sqlite")}}
+
+// newTestDB opens a temporary SQLite database, applies the migrations,
+// and registers cleanup to close and remove it when the test finishes.
+func newTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+
+	file, err := os.CreateTemp("", "test-db-*.sqlite")
+	if err != nil {
+		t.Fatalf("creating temp database file: %v", err)
+	}
+	name := file.Name()
+	file.Close()
+
+	db, err := database.New(context.Background(), database.Config{
+		DSN:          name + "?_pragma=foreign_keys(1)",
+		MaxOpenConns: 1,
+		MaxIdleConns: 1,
+	})
+	if err != nil {
+		t.Fatalf("opening test database: %v", err)
+	}
+
+	err = database.MigrateUp(db, assets.Migrations)
+	if err != nil {
+		t.Fatalf("running migrations: %v", err)
+	}
+
+	t.Cleanup(func() {
+		db.Close()
+		os.Remove(name)
+	})
+
+	return db
+}
+{{else if .NeedsDB}}
+
+// newTestDB returns nil for dialects that need a running database
+// server; tests that require the database skip themselves instead.
+func newTestDB(t *testing.T) *sqlx.DB {
+	t.Helper()
+	t.Skipf("database tests are skipped for the %s dialect; they need a running database server", "{{.Dialect}}")
+	return nil
+}
+{{end}}
+
+// testServer wraps an httptest.Server with a client that carries a
+// cookie jar.
+type testServer struct {
+	*httptest.Server
+}
+
+// newTestServer starts a test server serving the API's routes.
+func newTestServer(t *testing.T, app *application) *testServer {
+	t.Helper()
+
+	ts := httptest.NewServer(app.routes())
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("creating cookie jar: %v", err)
+	}
+	ts.Client().Jar = jar
+
+	t.Cleanup(ts.Close)
+
+	return &testServer{ts}
+}
+
+// get performs a GET request against the test server and returns the
+// response status, headers and body.
+func (ts *testServer) get(t *testing.T, urlPath string) (int, http.Header, string) {
+	t.Helper()
+
+	rs, err := ts.Client().Get(ts.URL + urlPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}
+
+// getWithToken performs a GET request carrying an Authorization: Bearer
+// header.
+func (ts *testServer) getWithToken(t *testing.T, urlPath, token string) (int, http.Header, string) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+urlPath, nil)
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	rs, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("GET %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}
+
+// postJSON performs a POST request with a JSON body.
+func (ts *testServer) postJSON(t *testing.T, urlPath, jsonBody string) (int, http.Header, string) {
+	t.Helper()
+
+	rs, err := ts.Client().Post(ts.URL+urlPath, "application/json", strings.NewReader(jsonBody))
+	if err != nil {
+		t.Fatalf("POST %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}
+
+// putJSON performs a PUT request with a JSON body.
+func (ts *testServer) putJSON(t *testing.T, urlPath, jsonBody string) (int, http.Header, string) {
+	t.Helper()
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+urlPath, strings.NewReader(jsonBody))
+	if err != nil {
+		t.Fatalf("building request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	rs, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatalf("PUT %s: %v", urlPath, err)
+	}
+	defer rs.Body.Close()
+
+	body, err := io.ReadAll(rs.Body)
+	if err != nil {
+		t.Fatalf("reading response body: %v", err)
+	}
+
+	return rs.StatusCode, rs.Header, string(body)
+}
+
+// decodeJSON unmarshals a JSON body into dst.
+func decodeJSON(t *testing.T, body string, dst any) {
+	t.Helper()
+
+	if err := json.Unmarshal([]byte(body), dst); err != nil {
+		t.Fatalf("decoding JSON response %q: %v", body, err)
+	}
+}
