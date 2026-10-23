@@ -63,4 +63,14 @@ gate:
 	done; \
 	echo "gate: all generated codebases build, vet and test cleanly"
 
-.PHONY: help audit test test/cover upgradeable tidy build run run/live gate
+.PHONY: help audit test test/cover upgradeable tidy build run run/live gate matrix
+
+## matrix: Generate the full permutation matrix to /tmp/nmb-matrix and build, vet and test every codebase.
+matrix:
+	@rm -rf /tmp/nmb-matrix
+	@NMB_MATRIX_DIR=/tmp/nmb-matrix go test -count=1 -run TestMatrixGenerate ./internal/generator/
+	@set -e; for dir in /tmp/nmb-matrix/*/; do \
+		echo "== verifying $$(basename $$dir) =="; \
+		(cd $$dir && go build ./... && go vet ./... && go test ./...); \
+	done; \
+	echo "matrix: all generated codebases build, vet and test cleanly"

@@ -13,6 +13,9 @@ import (
 {{- if .AccountsJWT}}
 	"strconv"
 {{- end}}
+{{- if and .AccountsJWT .BasicAuth}}
+	"strings"
+{{- end}}
 )
 
 {{- if .RequestLogging}}
@@ -62,6 +65,15 @@ func (w *statusInterceptor) Write(b []byte) (int, error) {
 // other than local development.
 func (app *application) basicAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+{{- if .AccountsJWT}}
+		// Requests carrying a bearer token pass through to the JWT
+		// middleware, which performs its own authentication; basic auth
+		// continues to gate anonymous access to the remaining routes.
+		if strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") {
+			next.ServeHTTP(w, r)
+			return
+		}
+{{- end}}
 		username, password, ok := r.BasicAuth()
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)

@@ -50,6 +50,10 @@ func newTestApplication(t *testing.T) *application {
 	cfg := config{
 		baseURL:  "http://test.example",
 		httpPort: 6633,
+{{- if .BasicAuth}}
+		basicAuthUsername: "admin",
+		basicAuthPassword: "pa55word",
+{{- end}}
 	}
 
 	app := &application{
@@ -147,6 +151,16 @@ func newTestServer(t *testing.T, app *application) *testServer {
 		t.Fatalf("creating cookie jar: %v", err)
 	}
 	ts.Client().Jar = jar
+{{- if .BasicAuth}}
+
+	// Send the configured basic auth credentials with every request
+	// that does not carry its own Authorization header.
+	ts.Client().Transport = basicAuthTransport{
+		RoundTripper: ts.Client().Transport,
+		username:     app.config.basicAuthUsername,
+		password:     app.config.basicAuthPassword,
+	}
+{{- end}}
 
 	// Return the first response without following redirects, so tests
 	// can assert on redirect status codes and Location headers.
@@ -205,3 +219,20 @@ func (ts *testServer) postForm(t *testing.T, urlPath string, form url.Values) (i
 
 	return rs.StatusCode, rs.Header, string(body)
 }
+{{- if .BasicAuth}}
+
+// basicAuthTransport adds basic authentication credentials to requests
+// that do not already carry an Authorization header.
+type basicAuthTransport struct {
+	http.RoundTripper
+	username string
+	password string
+}
+
+func (t basicAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.Header.Get("Authorization") == "" {
+		req.SetBasicAuth(t.username, t.password)
+	}
+	return t.RoundTripper.RoundTrip(req)
+}
+{{- end}}

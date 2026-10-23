@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -853,5 +854,177 @@ func TestGeneratePlusFeatures(t *testing.T) {
 		if !strings.Contains(string(helpers), want) {
 			t.Errorf("cmd/web/helpers.go want substring %q", want)
 		}
+	}
+}
+
+// matrixSpecs returns the curated permutation set for the compile
+// matrix: every router for both app types, every database dialect, both
+// configuration sources, every log format, and the feature combinations
+// most likely to interact badly with each other.
+func matrixSpecs() map[string]spec.ProjectSpec {
+	base := func() spec.ProjectSpec {
+		s := testSpec()
+		return s
+	}
+	api := func() spec.ProjectSpec {
+		s := base()
+		s.AppType = spec.AppAPI
+		return s
+	}
+
+	specs := map[string]spec.ProjectSpec{}
+	add := func(name string, mutate func(*spec.ProjectSpec)) {
+		s := base()
+		if strings.HasPrefix(name, "api-") {
+			s = api()
+		}
+		mutate(&s)
+		s.ApplyDependencies()
+		specs[name] = s
+	}
+
+	// Every router, both app types, no database.
+	for _, r := range []spec.Router{spec.RouterServeMux, spec.RouterFlow, spec.RouterChi, spec.RouterGorilla, spec.RouterHttpRouter} {
+		router := r
+		add(fmt.Sprintf("web-router-%s", router), func(s *spec.ProjectSpec) { s.Router = router })
+		add(fmt.Sprintf("api-router-%s", router), func(s *spec.ProjectSpec) { s.Router = router })
+	}
+
+	// Every database dialect, with migrations, both app types.
+	for _, d := range []spec.Database{spec.DBSQLite, spec.DBPostgres, spec.DBMySQL} {
+		dialect := d
+		add(fmt.Sprintf("web-db-%s", dialect), func(s *spec.ProjectSpec) {
+			s.Database = dialect
+			s.Migrations = true
+		})
+		add(fmt.Sprintf("api-db-%s", dialect), func(s *spec.ProjectSpec) {
+			s.Database = dialect
+			s.Migrations = true
+		})
+	}
+
+	// Database without migration helpers.
+	add("web-db-nomigrate", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBSQLite
+		s.Migrations = false
+	})
+
+	// Configuration sources and log formats.
+	add("web-env-json", func(s *spec.ProjectSpec) {
+		s.ConfigSource = spec.ConfigEnv
+		s.LogFormat = spec.LogJSON
+	})
+	add("api-env-colorized", func(s *spec.ProjectSpec) {
+		s.ConfigSource = spec.ConfigEnv
+		s.LogFormat = spec.LogColorized
+	})
+	add("web-flags-json", func(s *spec.ProjectSpec) {
+		s.ConfigSource = spec.ConfigFlags
+		s.LogFormat = spec.LogJSON
+	})
+
+	// Free optional features together.
+	add("web-features", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBSQLite
+		s.Migrations = true
+		s.RequestLogging = true
+		s.BasicAuth = true
+		s.GitIntegration = true
+		s.SecureCookies = true
+	})
+	add("api-features", func(s *spec.ProjectSpec) {
+		s.RequestLogging = true
+		s.BasicAuth = true
+		s.GitIntegration = true
+		s.SecureCookies = true
+	})
+
+	// Sessions across dialects.
+	add("web-sessions-pg", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBPostgres
+		s.Migrations = true
+		s.Sessions = true
+	})
+	add("web-sessions-mysql", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBMySQL
+		s.Migrations = true
+		s.Sessions = true
+	})
+
+	// Accounts variants across dialects.
+	add("web-accounts-pg", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBPostgres
+		s.Migrations = true
+		s.AccountsFull = true
+	})
+	add("api-jwt-mysql", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBMySQL
+		s.Migrations = true
+		s.AccountsJWT = true
+	})
+
+	// Plus platform features together.
+	add("web-plus", func(s *spec.ProjectSpec) {
+		s.AutoHTTPS = true
+		s.CustomErrorPages = true
+		s.Emails = true
+		s.ErrorNotifications = true
+	})
+
+	// Everything on, both app types.
+	add("web-everything", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBSQLite
+		s.Migrations = true
+		s.RequestLogging = true
+		s.BasicAuth = true
+		s.GitIntegration = true
+		s.SecureCookies = true
+		s.Sessions = true
+		s.AutoHTTPS = true
+		s.CustomErrorPages = true
+		s.Emails = true
+		s.ErrorNotifications = true
+		s.Tests = true
+		s.AccountsFull = true
+	})
+	add("api-everything", func(s *spec.ProjectSpec) {
+		s.Database = spec.DBSQLite
+		s.Migrations = true
+		s.RequestLogging = true
+		s.BasicAuth = true
+		s.GitIntegration = true
+		s.SecureCookies = true
+		s.AutoHTTPS = true
+		s.Emails = true
+		s.ErrorNotifications = true
+		s.Tests = true
+		s.AccountsJWT = true
+	})
+
+	return specs
+}
+
+// TestMatrixGenerate writes one codebase per matrix spec to
+// $NMB_MATRIX_DIR for the make matrix target to compile, vet and test.
+// It is skipped when the environment variable is unset.
+func TestMatrixGenerate(t *testing.T) {
+	matrixDir := os.Getenv("NMB_MATRIX_DIR")
+	if matrixDir == "" {
+		t.Skip("NMB_MATRIX_DIR not set")
+	}
+
+	for name, s := range matrixSpecs() {
+		t.Run(name, func(t *testing.T) {
+			rsp, err := spec.Resolve(s)
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			rsp.Port = 6633
+			rsp.SessionCookieName = "session_matrix0001"
+
+			if _, err := Generate(rsp, filepath.Join(matrixDir, name), slog.Default(), Options{Tidy: true}); err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+		})
 	}
 }
