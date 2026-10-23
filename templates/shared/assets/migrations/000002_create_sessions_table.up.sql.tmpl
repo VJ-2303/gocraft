@@ -1,0 +1,25 @@
+{{- if eq .Dialect "sqlite"}}
+CREATE TABLE IF NOT EXISTS sessions (
+	token TEXT PRIMARY KEY,
+	expiry REAL NOT NULL,
+	data BLOB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expiry);
+{{- else if eq .Dialect "postgres"}}
+CREATE TABLE IF NOT EXISTS sessions (
+	token TEXT PRIMARY KEY,
+	expiry TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '1 day',
+	data BYTEA NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expiry);
+{{- else if eq .Dialect "mysql"}}
+CREATE TABLE IF NOT EXISTS sessions (
+	token CHAR(43) PRIMARY KEY,
+	expiry DATETIME(6) NOT NULL,
+	data BLOB NOT NULL
+);
+
+CREATE INDEX sessions_expiry_idx ON sessions(expiry);
+{{- end}}

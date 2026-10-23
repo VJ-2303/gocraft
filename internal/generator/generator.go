@@ -112,18 +112,22 @@ func tidy(dir string) error {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
 
+	output := &strings.Builder{}
+	cmd.Stdout = output
+	cmd.Stderr = output
+
 	done := make(chan error, 1)
 	go func() { done <- cmd.Run() }()
 
 	select {
 	case err := <-done:
 		if err != nil {
-			return fmt.Errorf("%w (output: %s)", err, cmd.Stderr)
+			return fmt.Errorf("%w (output: %s)", err, output.String())
 		}
 		return nil
 	case <-time.After(10 * time.Minute):
 		_ = cmd.Process.Kill()
-		return fmt.Errorf("go mod tidy timed out after 10m")
+		return fmt.Errorf("go mod tidy timed out after 10m (output: %s)", output.String())
 	}
 }
 

@@ -1,0 +1,10 @@
+{{- if eq .Dialect "sqlite"}}
+DROP INDEX IF EXISTS sessions_expiry_idx;
+DROP TABLE IF EXISTS sessions;
+{{- else if eq .Dialect "postgres"}}
+DROP INDEX IF EXISTS sessions_expiry_idx;
+DROP TABLE IF EXISTS sessions;
+{{- else if eq .Dialect "mysql"}}
+DROP INDEX sessions_expiry_idx ON sessions;
+DROP TABLE IF EXISTS sessions;
+{{- end}}

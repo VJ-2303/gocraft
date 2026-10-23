@@ -44,6 +44,10 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/assets/efs.go.tmpl", OutPath: "assets/efs.go", Cond: rsp.AppType == spec.AppWeb || rsp.Migrations},
 		{Template: "shared/assets/migrations/000001_init.up.sql", OutPath: "assets/migrations/000001_init.up.sql", Cond: rsp.Migrations, Copy: true},
 		{Template: "shared/assets/migrations/000001_init.down.sql", OutPath: "assets/migrations/000001_init.down.sql", Cond: rsp.Migrations, Copy: true},
+		{Template: "shared/assets/migrations/000002_create_sessions_table.up.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.up.sql", Cond: rsp.Sessions},
+		{Template: "shared/assets/migrations/000002_create_sessions_table.down.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.down.sql", Cond: rsp.Sessions},
+
+		{Template: "shared/internal/cookies/cookies.go.tmpl", OutPath: "internal/cookies/cookies.go", Cond: rsp.SecureCookies},
 	}
 
 	files = append(files, appFiles(rsp)...)
