@@ -1,0 +1,81 @@
+// The API's HTTP server: construction and serving.
+package main
+
+import (
+	"fmt"
+	"log/slog"
+	"net/http"
+	"time"
+{{- if .AutoHTTPS}}
+	"crypto/tls"
+
+	"golang.org/x/crypto/acme"
+	"golang.org/x/crypto/acme/autocert"
+{{- end}}
+)
+
+// newServer returns a new http.Server instance with sensible timeout
+// settings. Messages emitted by the server itself are logged at the
+// Warn level.
+func (app *application) newServer() *http.Server {
+	return &http.Server{
+		Addr:         fmt.Sprintf(":%d", app.config.httpPort),
+		Handler:      app.routes(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		ErrorLog:     slog.NewLogLogger(app.logger.Handler(), slog.LevelWarn),
+	}
+}
+{{if .AutoHTTPS}}
+
+// leStagingDirURL is the Let's Encrypt staging directory, which issues
+// untrusted certificates without the production rate limits.
+const leStagingDirURL = "https://acme-staging.api.letsencrypt.org/directory"
+
+// serveAutoHTTPS serves the API over HTTPS on port 443, using
+// automatically provisioned and renewed Let's Encrypt certificates. Port
+// 80 answers the HTTP-01 challenge and redirects plain HTTP traffic to
+// HTTPS. Certificates are cached in a certs directory relative to the
+// running application.
+func (app *application) serveAutoHTTPS(srv *http.Server) error {
+	certManager := &autocert.Manager{
+		Prompt:     autocert.AcceptTOS,
+		Cache:      autocert.DirCache("certs"),
+		HostPolicy: autocert.HostWhitelist(app.config.autoHTTPS.domain),
+	}
+
+	if app.config.autoHTTPS.email != "" {
+		certManager.Email = app.config.autoHTTPS.email
+	}
+
+	if app.config.autoHTTPS.staging {
+		certManager.Client = &acme.Client{DirectoryURL: leStagingDirURL}
+	}
+
+	// Serve plain HTTP on port 80 for the ACME HTTP-01 challenge, and
+	// redirect all other traffic to HTTPS.
+	redirect := &http.Server{
+		Addr:      ":80",
+		Handler:   certManager.HTTPHandler(nil),
+		ErrorLog:  slog.NewLogLogger(app.logger.Handler(), slog.LevelWarn),
+	}
+
+	go func() {
+		app.logger.Info("starting HTTP redirect server", slog.Group("server", "addr", redirect.Addr))
+		if err := redirect.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			app.logger.Error("HTTP redirect server failed", "error", err)
+		}
+	}()
+
+	srv.Addr = ":443"
+	srv.TLSConfig = &tls.Config{
+		MinVersion:     tls.VersionTLS12,
+		GetCertificate: certManager.GetCertificate,
+	}
+
+	app.logger.Info("starting HTTPS server", slog.Group("server", "addr", srv.Addr))
+
+	return srv.ListenAndServeTLS("", "")
+}
+{{end}}

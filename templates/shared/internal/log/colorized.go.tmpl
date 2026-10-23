@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"sync"
-	"time"
 )
 
 // ANSI color escape sequences used by the colorized handler.
@@ -43,7 +42,7 @@ func (h *colorizedHandler) Enabled(_ context.Context, level slog.Level) bool {
 func (h *colorizedHandler) Handle(_ context.Context, r slog.Record) error {
 	buf := fmt.Sprintf("%s%s%s %s",
 		colorGray,
-		r.Time.Format(time.TimeOnly),
+		r.Time.Format("Jan 02 15:04:05.000"),
 		colorReset,
 		levelColor(r.Level),
 	)
@@ -81,13 +80,13 @@ func (h *colorizedHandler) WithGroup(_ string) slog.Handler {
 func levelColor(level slog.Level) string {
 	switch {
 	case level >= slog.LevelError:
-		return fmt.Sprintf("%sERROR%s ", colorRed, colorReset)
+		return fmt.Sprintf("%sERR%s ", colorRed, colorReset)
 	case level >= slog.LevelWarn:
-		return fmt.Sprintf("%sWARN%s ", colorYellow, colorReset)
+		return fmt.Sprintf("%sWRN%s ", colorYellow, colorReset)
 	case level >= slog.LevelInfo:
-		return fmt.Sprintf("%sINFO%s ", colorBlue, colorReset)
+		return fmt.Sprintf("%sINF%s ", colorBlue, colorReset)
 	default:
-		return fmt.Sprintf("%sDEBUG%s ", colorGray, colorReset)
+		return fmt.Sprintf("%sDBG%s ", colorGray, colorReset)
 	}
 }
 

@@ -17,12 +17,17 @@ func (app *application) routes() http.Handler {
 	mux := httprouter.New()
 
 	// Serve static files from the embedded assets.
-	mux.Handler(http.MethodGet, "/static/*filepath", http.FileServerFS(app.assets))
+	mux.Handler(http.MethodGet, "/static/*filepath", http.FileServerFS(app.static))
 
 	// Application routes.
 	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.home(w, r)
 	})
+{{if .BasicAuth}}
+	mux.GET("/restricted-basic-auth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		app.restrictedBasicAuth(w, r)
+	})
+{{end}}
 
 	// Any other path is not found.
 	mux.NotFound = http.HandlerFunc(app.notFound)
@@ -51,6 +56,11 @@ func (app *application) routes() http.Handler {
 {{end}}	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.home(w, r)
 	})
+{{if .BasicAuth}}
+	mux.GET("/restricted-basic-auth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		app.restrictedBasicAuth(w, r)
+	})
+{{end}}
 
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux

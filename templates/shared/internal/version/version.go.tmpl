@@ -8,30 +8,26 @@ import (
 )
 
 var (
-	version  = "dev"
-	revision = "unknown"
+	version  = ""
+	revision = ""
 )
 
 func init() {
 	// If the application was built from source control, the build
-	// information will include the module version and the VCS metadata.
+	// information carries the module version and VCS metadata.
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
+		version, revision = "(devel)", "unavailable"
 		return
 	}
 
-	if v := info.Main.Version; v != "" && v != "(devel)" {
-		version = strings.TrimPrefix(v, "v")
-	}
-
-	for _, setting := range info.Settings {
-		if setting.Key == "vcs.revision" && setting.Value != "" {
-			revision = setting.Value
-		}
-	}
+	version = deriveVersion(info)
+	revision = deriveRevision(info)
 }
 
-// Get returns the version of the application.
+// Get returns the version of the application: the latest version tag
+// when the module was tagged, otherwise a pseudo-version derived from
+// the commit time and hash. Uncommitted changes append a +dirty suffix.
 func Get() string {
 	return version
 }
@@ -39,4 +35,76 @@ func Get() string {
 // GetRevision returns the VCS revision (commit hash) of the application.
 func GetRevision() string {
 	return revision
+}
+
+// deriveVersion extracts the version from the build information: the
+// main module version when it is set and not a development build,
+// otherwise a pseudo-version from the vcs.time and vcs.revision
+// settings.
+func deriveVersion(info *debug.BuildInfo) string {
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		return clean(v)
+	}
+
+	var commitTime, commitHash, modified string
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.time":
+			commitTime = setting.Value
+		case "vcs.revision":
+			commitHash = setting.Value
+		case "vcs.modified":
+			modified = setting.Value
+		}
+	}
+
+	if commitHash == "" {
+		return "(devel)"
+	}
+
+	v := "v0.0.0"
+	if commitTime != "" {
+		// Pseudo-versions use the commit time as YYYYMMDDHHMMSS in the
+		// UTC timezone, which the RFC 3339 timestamp prefixes directly.
+		if len(commitTime) >= 14 {
+			stamp := strings.Map(keepDigits, commitTime[:len("2006-01-02T15:04:05")])
+			v = "v0.0.0-" + stamp
+		}
+	}
+
+	if len(commitHash) > 12 {
+		commitHash = commitHash[:12]
+	}
+	v += "-" + commitHash
+
+	if modified == "true" {
+		v += "+dirty"
+	}
+
+	return v
+}
+
+// deriveRevision extracts the full commit hash from the build
+// information.
+func deriveRevision(info *debug.BuildInfo) string {
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			return setting.Value
+		}
+	}
+	return "unavailable"
+}
+
+// clean strips a +incompatible suffix, if present.
+func clean(v string) string {
+	return strings.TrimSuffix(v, "+incompatible")
+}
+
+// keepDigits maps a rune to itself when it is a digit, dropping the
+// dashes, colons and timezone marker from a timestamp.
+func keepDigits(r rune) rune {
+	if r >= '0' && r <= '9' {
+		return r
+	}
+	return -1
 }

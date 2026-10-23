@@ -50,21 +50,22 @@ func (app *application) defaultHTMLData(r *http.Request) templateData {
 	return data
 }
 
-// backgroundTask runs fn in a background goroutine, automatically
-// recovering from any panics and reporting any returned errors. The
-// application waits for outstanding background tasks to complete before
-// shutting down.
-func (app *application) backgroundTask(fn func() error) {
+// backgroundTask runs fn in a background goroutine after the HTTP
+// response has been sent. Panics are recovered, and both panics and
+// returned errors are reported through reportServerError, so they are
+// logged (and emailed) like request errors. The application waits for
+// outstanding background tasks to complete before shutting down.
+func (app *application) backgroundTask(r *http.Request, fn func() error) {
 	app.wg.Go(func() {
 		defer func() {
 			if err := recover(); err != nil {
-				app.logger.Error(fmt.Sprintf("%v", err), "panic", true)
+				app.reportServerError(r, fmt.Errorf("%s", err))
 			}
 		}()
 
 		err := fn()
 		if err != nil {
-			app.logger.Error("background task failed", "error", err)
+			app.reportServerError(r, err)
 		}
 	})
 }

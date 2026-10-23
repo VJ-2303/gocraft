@@ -38,11 +38,7 @@ func newTestApplication(t *testing.T) *application {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	templateRenderer, err := response.NewHTMLRenderer(assets.HTML, funcs.All(),
-	{{- range .WebPages}}
-		"{{.}}",
-	{{- end}}
-	)
+	htmlRenderer, err := response.NewHTMLRenderer(assets.HTMLFiles, funcs.All())
 	if err != nil {
 		t.Fatalf("initializing template renderer: %v", err)
 	}
@@ -51,16 +47,18 @@ func newTestApplication(t *testing.T) *application {
 		baseURL:  "http://test.example",
 		httpPort: 6633,
 {{- if .BasicAuth}}
-		basicAuthUsername: "admin",
-		basicAuthPassword: "pa55word",
+		basicAuth: basicAuthConfig{
+			username:       "admin",
+			hashedPassword: "$2a$12$Oz6h/J3bLOmVNgl.6ivcFORe.oAIGvYOYXavY9VV50T3lMwt4dC.a",
+		},
 {{- end}}
 	}
 
 	app := &application{
-		config:    cfg,
-		logger:    logger,
-		assets:    assets.FS,
-		templates: templateRenderer,
+		config: cfg,
+		logger: logger,
+		html:   htmlRenderer,
+		static: assets.StaticFiles,
 	}
 {{- if .NeedsDB}}
 
@@ -157,8 +155,8 @@ func newTestServer(t *testing.T, app *application) *testServer {
 	// that does not carry its own Authorization header.
 	ts.Client().Transport = basicAuthTransport{
 		RoundTripper: ts.Client().Transport,
-		username:     app.config.basicAuthUsername,
-		password:     app.config.basicAuthPassword,
+		username:     "admin",
+		password:     "pa55word",
 	}
 {{- end}}
 

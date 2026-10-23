@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -244,8 +243,7 @@ func TestGenerateWebApp(t *testing.T) {
 	for _, want := range []string{
 		`"github.com/alice/example/assets"`,
 		`"http-port", 6633`,
-		"response.NewHTMLRenderer",
-		`"home.tmpl"`,
+		"response.NewHTMLRenderer(assets.HTMLFiles, funcs.All())",
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Errorf("cmd/web/main.go want substring %q", want)
@@ -490,7 +488,7 @@ func TestGenerateSQLiteAppWithMigrations(t *testing.T) {
 		`"db-automigrate"`,
 		"database.New(",
 		"database.MigrateUp(db, assets.Migrations)",
-		"db:        db,",
+		`"db-max-lifetime"`,
 	} {
 		if !strings.Contains(string(main), want) {
 			t.Errorf("cmd/web/main.go want substring %q", want)
@@ -814,7 +812,9 @@ func TestGeneratePlusFeatures(t *testing.T) {
 		"internal/mailer/mailer.go",
 		"assets/emails/example.tmpl",
 		"assets/emails/error-notification.tmpl",
-		"assets/html/pages/error.tmpl",
+		"assets/html/pages/errors/500.tmpl",
+		"assets/html/pages/errors/404.tmpl",
+		"assets/html/pages/errors/400.tmpl",
 	} {
 		if !contains(result.Files, want) {
 			t.Errorf("want generated file %s, got %v", want, result.Files)
@@ -827,9 +827,10 @@ func TestGeneratePlusFeatures(t *testing.T) {
 	}
 	for _, want := range []string{
 		`"smtp-host"`,
-		`"admin-email"`,
-		`"https-port"`,
-		"autocert.Manager",
+		`"notifications-email"`,
+		`"auto-https-domain"`,
+		`"auto-https-email"`,
+		`"auto-https-staging"`,
 		"mailer.New(",
 	} {
 		if !strings.Contains(string(main), want) {
@@ -837,9 +838,18 @@ func TestGeneratePlusFeatures(t *testing.T) {
 		}
 	}
 
-	// The error page must be in the parsed page list.
-	if !slices.Contains(rsp.WebPages, "error.tmpl") {
-		t.Errorf("want error.tmpl in WebPages, got %v", rsp.WebPages)
+	serverFile, err := os.ReadFile(filepath.Join(target, "cmd/web/server.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"autocert.Manager",
+		"slog.LevelWarn",
+		`HostWhitelist(app.config.autoHTTPS.domain)`,
+	} {
+		if !strings.Contains(string(serverFile), want) {
+			t.Errorf("cmd/web/server.go want substring %q", want)
+		}
 	}
 
 	errorsFile, err := os.ReadFile(filepath.Join(target, "cmd/web/errors.go"))
@@ -848,8 +858,8 @@ func TestGeneratePlusFeatures(t *testing.T) {
 	}
 	for _, want := range []string{
 		"reportServerError",
-		`app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")`,
-		`app.render(w, r, status, "error.tmpl", data)`,
+		`app.mailer.Send(app.config.notifications.email, data, "error-notification.tmpl")`,
+		`app.render(w, r, http.StatusInternalServerError, "pages/errors/500.tmpl", data)`,
 		`errors.As(err, &badRequestErr)`,
 	} {
 		if !strings.Contains(string(errorsFile), want) {

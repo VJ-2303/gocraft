@@ -38,7 +38,7 @@ func (f *credentialsForm) validate() {
 func (app *application) restricted(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 
-	app.render(w, r, http.StatusOK, "restricted.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/restricted.tmpl", data)
 }
 
 // signup displays the signup form.
@@ -46,7 +46,7 @@ func (app *application) signup(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 	data["Form"] = credentialsForm{}
 
-	app.render(w, r, http.StatusOK, "signup.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/signup.tmpl", data)
 }
 
 // signupSubmit validates the submitted credentials and creates a new
@@ -76,7 +76,7 @@ func (app *application) signupSubmit(w http.ResponseWriter, r *http.Request) {
 		data := app.defaultHTMLData(r)
 		data["Form"] = form
 
-		app.render(w, r, http.StatusUnprocessableEntity, "signup.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "pages/signup.tmpl", data)
 		return
 	}
 
@@ -108,7 +108,7 @@ func (app *application) login(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 	data["Form"] = credentialsForm{}
 
-	app.render(w, r, http.StatusOK, "login.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/login.tmpl", data)
 }
 
 // loginSubmit validates the submitted credentials and logs the user in,
@@ -130,7 +130,7 @@ func (app *application) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		data := app.defaultHTMLData(r)
 		data["Form"] = form
 
-		app.render(w, r, http.StatusUnprocessableEntity, "login.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "pages/login.tmpl", data)
 		return
 	}
 
@@ -154,7 +154,7 @@ func (app *application) loginSubmit(w http.ResponseWriter, r *http.Request) {
 		data := app.defaultHTMLData(r)
 		data["Form"] = form
 
-		app.render(w, r, http.StatusUnprocessableEntity, "login.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "pages/login.tmpl", data)
 		return
 	}
 
@@ -202,7 +202,7 @@ func (app *application) forgottenPassword(w http.ResponseWriter, r *http.Request
 	data := app.defaultHTMLData(r)
 	data["Form"] = emailForm{}
 
-	app.render(w, r, http.StatusOK, "forgotten-password.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/forgotten-password.tmpl", data)
 }
 
 // forgottenPasswordSubmit validates the email address and, when an
@@ -225,7 +225,7 @@ func (app *application) forgottenPasswordSubmit(w http.ResponseWriter, r *http.R
 		data := app.defaultHTMLData(r)
 		data["Form"] = form
 
-		app.render(w, r, http.StatusUnprocessableEntity, "forgotten-password.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "pages/forgotten-password.tmpl", data)
 		return
 	}
 
@@ -252,7 +252,7 @@ func (app *application) forgottenPasswordSubmit(w http.ResponseWriter, r *http.R
 		data["To"] = user.Email
 		data["ResetURL"] = fmt.Sprintf("%s/password-reset/%s", app.config.baseURL, plaintextToken)
 
-		app.backgroundTask(func() error {
+		app.backgroundTask(r, func() error {
 			return app.mailer.Send(user.Email, data, "forgot-password.tmpl")
 		})
 	}
@@ -265,7 +265,7 @@ func (app *application) forgottenPasswordSubmit(w http.ResponseWriter, r *http.R
 func (app *application) forgottenPasswordConfirmation(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 
-	app.render(w, r, http.StatusOK, "forgotten-password-confirmation.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/forgotten-password-confirmation.tmpl", data)
 }
 
 // newPasswordForm holds the new password submitted through the password
@@ -294,7 +294,7 @@ func (app *application) passwordReset(w http.ResponseWriter, r *http.Request) {
 	data["Form"] = newPasswordForm{}
 	data["Token"] = pathParam(r, "token")
 
-	app.render(w, r, http.StatusOK, "password-reset.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/password-reset.tmpl", data)
 }
 
 // passwordResetSubmit validates and stores the new password, deleting
@@ -330,7 +330,7 @@ func (app *application) passwordResetSubmit(w http.ResponseWriter, r *http.Reque
 		data["Form"] = form
 		data["Token"] = pathParam(r, "token")
 
-		app.render(w, r, http.StatusUnprocessableEntity, "password-reset.tmpl", data)
+		app.render(w, r, http.StatusUnprocessableEntity, "pages/password-reset.tmpl", data)
 		return
 	}
 
@@ -362,5 +362,5 @@ func (app *application) passwordResetSubmit(w http.ResponseWriter, r *http.Reque
 func (app *application) passwordResetConfirmation(w http.ResponseWriter, r *http.Request) {
 	data := app.defaultHTMLData(r)
 
-	app.render(w, r, http.StatusOK, "password-reset-confirmation.tmpl", data)
+	app.render(w, r, http.StatusOK, "pages/password-reset-confirmation.tmpl", data)
 }

@@ -105,10 +105,6 @@ type ResolvedSpec struct {
 	// go.mod.
 	GoVersion string
 
-	// WebPages lists the HTML page templates to parse at startup, for web
-	// applications only.
-	WebPages []string
-
 	// NeedsMailer reports whether SMTP sending is required, either because
 	// the emails feature is selected or because a feature like error
 	// notifications or user accounts sends mail.
@@ -129,6 +125,11 @@ type ResolvedSpec struct {
 	// SessionCookieName is the default session cookie name, randomized per
 	// codebase to avoid cookie clashes between local apps.
 	SessionCookieName string
+
+	// BasicAuthHashedPassword is the bcrypt hash of the default basic
+	// auth password ("pa55word"), shipped as the flag default like
+	// Autostrada's generated codebases.
+	BasicAuthHashedPassword string
 
 	// CookieSecretKey is a random 32-character string used by the secure
 	// cookies helpers, generated per codebase for development. Documented
@@ -180,14 +181,15 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 	}
 
 	r := ResolvedSpec{
-		ProjectSpec:       s,
-		UseDB:             s.Database != DBNone,
-		NeedsSessionStore: s.Sessions,
-		HasAuth:           s.AccountsFull || s.AccountsJWT,
-		NeedsMailer:       s.Emails || s.ErrorNotifications || s.AccountsFull || s.AccountsJWT,
-		Port:              1000 + rand.IntN(9000),
-		SessionCookieName: "session_" + randomSuffix(8),
-		CookieSecretKey:   randomKey(),
+		ProjectSpec:             s,
+		UseDB:                   s.Database != DBNone,
+		NeedsSessionStore:       s.Sessions,
+		HasAuth:                 s.AccountsFull || s.AccountsJWT,
+		NeedsMailer:             s.Emails || s.ErrorNotifications || s.AccountsFull || s.AccountsJWT,
+		Port:                    1000 + rand.IntN(9000),
+		SessionCookieName:       "session_" + randomSuffix(8),
+		BasicAuthHashedPassword: BasicAuthHashedPassword,
+		CookieSecretKey:         randomKey(),
 	}
 
 	r.NeedsDB = r.UseDB || s.Sessions || s.AccountsFull || s.AccountsJWT
@@ -214,19 +216,6 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 	r.MigrateTags = migrateTags[r.Dialect]
 	r.GoVersion = GoVersion
 	r.Requires = s.requires(&r)
-
-	if s.AppType == AppWeb {
-		r.WebPages = []string{"home.tmpl"}
-		if s.CustomErrorPages {
-			r.WebPages = append(r.WebPages, "error.tmpl")
-		}
-		if s.AccountsFull {
-			r.WebPages = append(r.WebPages,
-				"signup.tmpl", "login.tmpl", "restricted.tmpl",
-				"forgotten-password.tmpl", "forgotten-password-confirmation.tmpl",
-				"password-reset.tmpl", "password-reset-confirmation.tmpl")
-		}
-	}
 
 	return r, nil
 }
@@ -273,7 +262,7 @@ func (s ProjectSpec) requires(r *ResolvedSpec) []RequireLine {
 		add("github.com/justinas/nosurf")
 	}
 
-	if s.AccountsFull || s.AccountsJWT {
+	if s.AccountsFull || s.AccountsJWT || s.BasicAuth {
 		add("golang.org/x/crypto")
 	}
 
@@ -323,6 +312,10 @@ func randomSuffix(n int) string {
 func randomKey() string {
 	return randomSuffix(32)
 }
+
+// BasicAuthHashedPassword is the bcrypt hash (cost 12) of the default
+// basic auth password "pa55word".
+const BasicAuthHashedPassword = "$2a$12$Oz6h/J3bLOmVNgl.6ivcFORe.oAIGvYOYXavY9VV50T3lMwt4dC.a"
 
 // String returns a compact one-line summary of the spec, useful for logs.
 func (r ResolvedSpec) String() string {

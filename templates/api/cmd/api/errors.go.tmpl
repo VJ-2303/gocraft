@@ -24,15 +24,24 @@ func (app *application) reportServerError(r *http.Request, err error) {
 	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
 {{- if .ErrorNotifications}}
 
-	app.backgroundTask(func() error {
-		data := app.defaultEmailData()
-		data["Method"] = method
-		data["URI"] = uri
-		data["Trace"] = trace
-		data["Error"] = err.Error()
+	// Notifications are only sent when a recipient address is
+	// configured; errors are always logged regardless.
+	if app.config.notifications.email != "" {
+		// The notification runs via the wait group directly rather
+		// than backgroundTask, so a failed send is logged without
+		// recursing back into reportServerError.
+		app.wg.Go(func() {
+			data := app.defaultEmailData()
+			data["Method"] = method
+			data["URI"] = uri
+			data["Trace"] = trace
+			data["Error"] = err.Error()
 
-		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
-	})
+			if sendErr := app.mailer.Send(app.config.notifications.email, data, "error-notification.tmpl"); sendErr != nil {
+				app.logger.Error("sending error notification", "error", sendErr)
+			}
+		})
+	}
 {{- end}}
 }
 

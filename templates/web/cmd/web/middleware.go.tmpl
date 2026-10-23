@@ -2,79 +2,67 @@
 package main
 
 import (
-{{- if .BasicAuth}}
-	"crypto/subtle"
-{{- end}}
 	"fmt"
 	"net/http"
+{{- if or .RequestLogging .AccountsFull}}
+	"{{.ModulePath}}/internal/response"
+{{- end}}
 {{- if .RequestLogging}}
-	"time"
+	"log/slog"
+	"net"
 {{- end}}
 {{- if .AccountsFull}}
 	"github.com/justinas/nosurf"
+{{- end}}
+{{- if .BasicAuth}}
+	"{{.ModulePath}}/internal/password"
 {{- end}}
 )
 
 {{- if .RequestLogging}}
 
-// logRequest logs every request with the response status code, body size
-// and duration.
+// logRequest logs every completed request with the client IP, protocol,
+// method, URL, response status code and response body size.
 func (app *application) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		mw := &response.MetricsResponseWriter{ResponseWriter: w, Status: http.StatusOK}
 
-		interceptor := &statusInterceptor{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(mw, r)
 
-		next.ServeHTTP(interceptor, r)
-
-		app.logger.Info("request",
-			"method", r.Method,
-			"uri", r.URL.RequestURI(),
-			"status", interceptor.status,
-			"size", interceptor.bytes,
-			"duration", time.Since(start).String(),
+		app.logger.Info("request completed",
+			slog.Group("user", "ip", clientIP(r)),
+			slog.Group("request", "method", r.Method, "url", r.URL.RequestURI(), "proto", r.Proto),
+			slog.Group("response", "status", mw.Status, "size", mw.Size),
 		)
 	})
 }
 
-// statusInterceptor records the status code and body size of a response.
-type statusInterceptor struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-func (w *statusInterceptor) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *statusInterceptor) Write(b []byte) (int, error) {
-	n, err := w.ResponseWriter.Write(b)
-	w.bytes += n
-	return n, err
+// clientIP extracts the host portion of the remote address, which is
+// the best available default for the client IP behind no proxy.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 {{- end}}
 {{- if .BasicAuth}}
 
-// basicAuth provides HTTP basic authentication for all routes, using the
-// credentials configured at startup. Change the defaults for anything
-// other than local development.
+// basicAuth provides HTTP basic authentication, verifying the submitted
+// password against the configured bcrypt hash. Change the defaults for
+// anything other than local development.
 func (app *application) basicAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		username, password, ok := r.BasicAuth()
+		username, plaintext, ok := r.BasicAuth()
 		if !ok {
-			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-			app.clientError(w, r, http.StatusUnauthorized)
+			app.basicAuthenticationRequired(w, r)
 			return
 		}
 
-		usernameMatches := subtle.ConstantTimeCompare([]byte(username), []byte(app.config.basicAuthUsername)) == 1
-		passwordMatches := subtle.ConstantTimeCompare([]byte(password), []byte(app.config.basicAuthPassword)) == 1
-
-		if !usernameMatches || !passwordMatches {
-			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-			app.clientError(w, r, http.StatusUnauthorized)
+		matches, err := password.Matches(plaintext, []byte(app.config.basicAuth.hashedPassword))
+		if err != nil || username != app.config.basicAuth.username || !matches {
+			app.basicAuthenticationRequired(w, r)
 			return
 		}
 
@@ -112,7 +100,6 @@ func (app *application) secureHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
-
 {{- if .AccountsFull}}
 
 // authenticate reads the authenticated user ID from the session, looks
@@ -188,9 +175,12 @@ func (app *application) preventCSRF(next http.Handler) http.Handler {
 		return r.TLS != nil
 	})
 	csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		app.clientError(w, r, http.StatusBadRequest)
+		app.badRequest(w, r, errCSRF)
 	}))
 
 	return csrfHandler
 }
+
+// errCSRF is the error reported when CSRF validation fails.
+var errCSRF = &response.BadRequestError{Message: "CSRF token validation failed"}
 {{- end}}

@@ -39,8 +39,10 @@ func newTestApplication(t *testing.T) *application {
 		baseURL:  "http://test.example",
 		httpPort: 6633,
 {{- if .BasicAuth}}
-		basicAuthUsername: "admin",
-		basicAuthPassword: "pa55word",
+		basicAuth: basicAuthConfig{
+			username:       "admin",
+			hashedPassword: "$2a$12$Oz6h/J3bLOmVNgl.6ivcFORe.oAIGvYOYXavY9VV50T3lMwt4dC.a",
+		},
 {{- end}}
 	}
 
@@ -145,8 +147,8 @@ func newTestServer(t *testing.T, app *application) *testServer {
 	// that does not carry its own Authorization header.
 	ts.Client().Transport = basicAuthTransport{
 		RoundTripper: ts.Client().Transport,
-		username:     app.config.basicAuthUsername,
-		password:     app.config.basicAuthPassword,
+		username:     "admin",
+		password:     "pa55word",
 	}
 {{- end}}
 

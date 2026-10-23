@@ -2,13 +2,14 @@
 package main
 
 import (
-{{- if .BasicAuth}}
-	"crypto/subtle"
-{{- end}}
 	"fmt"
 	"net/http"
 {{- if .RequestLogging}}
-	"time"
+	"log/slog"
+	"net"
+{{- end}}
+{{- if or .RequestLogging .BasicAuth}}
+	"{{.ModulePath}}/internal/response"
 {{- end}}
 {{- if .AccountsJWT}}
 	"strconv"
@@ -17,48 +18,36 @@ import (
 	"strings"
 {{- end}}
 {{- if .BasicAuth}}
-	"{{.ModulePath}}/internal/response"
+	"{{.ModulePath}}/internal/password"
 {{- end}}
 )
 
 {{- if .RequestLogging}}
 
-// logRequest logs every request with the response status code, body size
-// and duration.
+// logRequest logs every completed request with the client IP, protocol,
+// method, URL, response status code and response body size.
 func (app *application) logRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
+		mw := &response.MetricsResponseWriter{ResponseWriter: w, Status: http.StatusOK}
 
-		interceptor := &statusInterceptor{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(mw, r)
 
-		next.ServeHTTP(interceptor, r)
-
-		app.logger.Info("request",
-			"method", r.Method,
-			"uri", r.URL.RequestURI(),
-			"status", interceptor.status,
-			"size", interceptor.bytes,
-			"duration", time.Since(start).String(),
+		app.logger.Info("request completed",
+			slog.Group("user", "ip", clientIP(r)),
+			slog.Group("request", "method", r.Method, "url", r.URL.RequestURI(), "proto", r.Proto),
+			slog.Group("response", "status", mw.Status, "size", mw.Size),
 		)
 	})
 }
 
-// statusInterceptor records the status code and body size of a response.
-type statusInterceptor struct {
-	http.ResponseWriter
-	status int
-	bytes  int
-}
-
-func (w *statusInterceptor) WriteHeader(status int) {
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-
-func (w *statusInterceptor) Write(b []byte) (int, error) {
-	n, err := w.ResponseWriter.Write(b)
-	w.bytes += n
-	return n, err
+// clientIP extracts the host portion of the remote address, which is
+// the best available default for the client IP behind no proxy.
+func clientIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
 }
 {{- end}}
 {{- if .BasicAuth}}
@@ -77,17 +66,15 @@ func (app *application) basicAuth(next http.Handler) http.Handler {
 			return
 		}
 {{- end}}
-		username, password, ok := r.BasicAuth()
+		username, plaintext, ok := r.BasicAuth()
 		if !ok {
-			app.basicAuthFailed(w, r)
+			app.basicAuthenticationRequired(w, r)
 			return
 		}
 
-		usernameMatches := subtle.ConstantTimeCompare([]byte(username), []byte(app.config.basicAuthUsername)) == 1
-		passwordMatches := subtle.ConstantTimeCompare([]byte(password), []byte(app.config.basicAuthPassword)) == 1
-
-		if !usernameMatches || !passwordMatches {
-			app.basicAuthFailed(w, r)
+		matches, err := password.Matches(plaintext, []byte(app.config.basicAuth.hashedPassword))
+		if err != nil || username != app.config.basicAuth.username || !matches {
+			app.basicAuthenticationRequired(w, r)
 			return
 		}
 
@@ -155,9 +142,9 @@ func (app *application) requireAuthenticatedUser(next http.HandlerFunc) http.Han
 
 {{- if .BasicAuth}}
 
-// basicAuthFailed sends the 401 response and challenge header for
-// failed HTTP basic authentication.
-func (app *application) basicAuthFailed(w http.ResponseWriter, r *http.Request) {
+// basicAuthenticationRequired sends the 401 response and challenge
+// header for failed HTTP basic authentication.
+func (app *application) basicAuthenticationRequired(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
 
 	err := response.JSON(w, http.StatusUnauthorized, envelope{"Error": "provided credentials are invalid"})

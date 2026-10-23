@@ -3,6 +3,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+{{- if .AccountsJWT}}
+	"time"
+{{- end}}
 )
 
 // envelope is the type used to wrap JSON response payloads.
@@ -19,20 +23,42 @@ func (app *application) defaultEmailData() envelope {
 }
 {{end}}
 
-// backgroundTask runs fn in a background goroutine, automatically
-// recovering from any panics and reporting any returned errors. The API
-// waits for outstanding background tasks to complete before shutting down.
-func (app *application) backgroundTask(fn func() error) {
+// backgroundTask runs fn in a background goroutine after the HTTP
+// response has been sent. Panics are recovered, and both panics and
+// returned errors are reported through reportServerError, so they are
+// logged (and emailed) like request errors. The API waits for
+// outstanding background tasks to complete before shutting down.
+func (app *application) backgroundTask(r *http.Request, fn func() error) {
 	app.wg.Go(func() {
 		defer func() {
 			if err := recover(); err != nil {
-				app.logger.Error(fmt.Sprintf("%v", err), "panic", true)
+				app.reportServerError(r, fmt.Errorf("%s", err))
 			}
 		}()
 
 		err := fn()
 		if err != nil {
-			app.logger.Error("background task failed", "error", err)
+			app.reportServerError(r, err)
 		}
 	})
 }
+{{- if .AccountsJWT}}
+
+// accessTokenLifetime is how long an authentication token remains
+// valid.
+const accessTokenLifetime = 24 * time.Hour
+
+// newAuthenticationToken generates and signs a new JWT authentication
+// token for the specified user ID, returning the token and its expiry
+// time.
+func (app *application) newAuthenticationToken(userID int64) (string, time.Time, error) {
+	expiry := time.Now().Add(accessTokenLifetime)
+
+	token, err := app.tokenizer.Create(fmt.Sprint(userID), accessTokenLifetime, "authentication")
+	if err != nil {
+		return "", time.Time{}, err
+	}
+
+	return token, expiry, nil
+}
+{{- end}}

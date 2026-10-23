@@ -1,5 +1,4 @@
-// The API entrypoint: configuration, dependency initialization and the
-// HTTP server lifecycle.
+// The API entrypoint: configuration and dependency initialization.
 package main
 
 import (
@@ -12,15 +11,10 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+{{- if .NeedsDB}}
 	"time"
-
-{{- if .AutoHTTPS}}
-	"crypto/tls"
-	"net/url"
-
-	"golang.org/x/crypto/acme/autocert"
-
 {{- end}}
+
 {{- if eq .LogFormat "colorized"}}
 	"{{.ModulePath}}/internal/log"
 
@@ -32,13 +26,13 @@ import (
 	"flag"
 
 {{- end}}
+{{- if .AccountsJWT}}
+	"{{.ModulePath}}/internal/auth"
+
+{{- end}}
 {{- if .NeedsMailer}}
 	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/mailer"
-
-{{- end}}
-{{- if .AccountsJWT}}
-	"{{.ModulePath}}/internal/auth"
 
 {{- end}}
 {{- if .Migrations}}
@@ -72,36 +66,39 @@ func run() error {
 	flag.StringVar(&cfg.baseURL, "base-url", "http://localhost:{{.Port}}", "base URL for the application")
 	flag.IntVar(&cfg.httpPort, "http-port", {{.Port}}, "port to serve the application on")
 {{- if .NeedsDB}}
-	flag.StringVar(&cfg.dbDSN, "db-dsn", "{{.Driver.ExampleDSN}}", "database DSN")
-	flag.IntVar(&cfg.dbMaxConns, "db-max-conns", 25, "maximum open database connections")
-	flag.IntVar(&cfg.dbMinConns, "db-min-conns", 0, "minimum idle database connections")
-	flag.DurationVar(&cfg.dbMaxIdleTime, "db-max-idle-time", 15*time.Minute, "maximum idle time for database connections")
+	flag.StringVar(&cfg.db.dsn, "db-dsn", "{{.Driver.ExampleDSN}}", "database DSN")
+	flag.IntVar(&cfg.db.maxOpenConns, "db-max-open-conns", 25, "maximum open database connections")
+	flag.IntVar(&cfg.db.maxIdleConns, "db-max-idle-conns", 25, "maximum idle database connections")
+	flag.DurationVar(&cfg.db.maxIdleTime, "db-max-idle-time", 5*time.Minute, "maximum idle time for database connections")
+	flag.DurationVar(&cfg.db.maxLifetime, "db-max-lifetime", 2*time.Hour, "maximum lifetime for database connections")
 {{- if .Migrations}}
-	flag.BoolVar(&cfg.dbAutomigrate, "db-automigrate", true, "apply up migrations automatically on startup")
+	flag.BoolVar(&cfg.db.automigrate, "db-automigrate", true, "apply up migrations automatically on startup")
 {{- end}}
 {{- end}}
 {{- if .BasicAuth}}
-	flag.StringVar(&cfg.basicAuthUsername, "basic-auth-username", "admin", "basic auth username")
-	flag.StringVar(&cfg.basicAuthPassword, "basic-auth-password", "password", "basic auth password")
+	flag.StringVar(&cfg.basicAuth.username, "basic-auth-username", "admin", "basic auth username")
+	flag.StringVar(&cfg.basicAuth.hashedPassword, "basic-auth-hashed-password", "{{.BasicAuthHashedPassword}}", "basic auth bcrypt-hashed password")
 {{- end}}
 {{- if .SecureCookies}}
-	flag.StringVar(&cfg.cookieSecretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "32-character secret key for cookie signing and encryption")
-{{- end}}
-{{- if .AccountsJWT}}
-	flag.StringVar(&cfg.jwtSecret, "jwt-secret", "{{.CookieSecretKey}}", "32-character secret key for signing authentication tokens")
+	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "32-character secret key for cookie signing and encryption")
 {{- end}}
 {{- if .NeedsMailer}}
-	flag.StringVar(&cfg.smtpHost, "smtp-host", "localhost", "SMTP server host")
-	flag.IntVar(&cfg.smtpPort, "smtp-port", 25, "SMTP server port")
-	flag.StringVar(&cfg.smtpUsername, "smtp-username", "", "SMTP server username")
-	flag.StringVar(&cfg.smtpPassword, "smtp-password", "", "SMTP server password")
-	flag.StringVar(&cfg.smtpFrom, "smtp-from", "noreply@localhost", "sender name and email address")
+	flag.StringVar(&cfg.smtp.host, "smtp-host", "localhost", "SMTP server host")
+	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP server port")
+	flag.StringVar(&cfg.smtp.username, "smtp-username", "", "SMTP server username")
+	flag.StringVar(&cfg.smtp.password, "smtp-password", "", "SMTP server password")
+	flag.StringVar(&cfg.smtp.from, "smtp-from", "noreply@localhost", "sender name and email address")
 {{- end}}
 {{- if .ErrorNotifications}}
-	flag.StringVar(&cfg.adminEmail, "admin-email", "admin@localhost", "admin email address for error notifications")
+	flag.StringVar(&cfg.notifications.email, "notifications-email", "", "email address to send error notifications to; empty disables notifications")
 {{- end}}
 {{- if .AutoHTTPS}}
-	flag.IntVar(&cfg.httpsPort, "https-port", 443, "port to serve the application on over HTTPS")
+	flag.StringVar(&cfg.autoHTTPS.domain, "auto-https-domain", "", "domain name to provision TLS certificates for")
+	flag.StringVar(&cfg.autoHTTPS.email, "auto-https-email", "", "contact email address for certificate problem notifications")
+	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use the Let's Encrypt staging environment")
+{{- end}}
+{{- if .AccountsJWT}}
+	flag.StringVar(&cfg.jwt.secret, "jwt-secret", "{{.CookieSecretKey}}", "32-character secret key for signing authentication tokens")
 {{- end}}
 	flag.Parse()
 {{- else}}
@@ -111,33 +108,53 @@ func run() error {
 		baseURL:  env.GetString("BASE_URL", "http://localhost:{{.Port}}"),
 		httpPort: env.GetInt("HTTP_PORT", {{.Port}}),
 {{- if .NeedsDB}}
-		dbDSN:         env.GetString("DB_DSN", "{{.Driver.ExampleDSN}}"),
-		dbMaxConns:    env.GetInt("DB_MAX_CONNS", 25),
-		dbMinConns:    env.GetInt("DB_MIN_CONNS", 0),
-		dbMaxIdleTime: env.GetDuration("DB_MAX_IDLE_TIME", 15*time.Minute),
+		db: dbConfig{
+			dsn:          env.GetString("DB_DSN", "{{.Driver.ExampleDSN}}"),
+			maxOpenConns: env.GetInt("DB_MAX_OPEN_CONNS", 25),
+			maxIdleConns: env.GetInt("DB_MAX_IDLE_CONNS", 25),
+			maxIdleTime:  env.GetDuration("DB_MAX_IDLE_TIME", 5*time.Minute),
+			maxLifetime:  env.GetDuration("DB_MAX_LIFETIME", 2*time.Hour),
 {{- if .Migrations}}
-		dbAutomigrate: env.GetBool("DB_AUTOMIGRATE", true),
+			automigrate: env.GetBool("DB_AUTOMIGRATE", true),
 {{- end}}
+		},
 {{- end}}
 {{- if .BasicAuth}}
-		basicAuthUsername: env.GetString("BASIC_AUTH_USERNAME", "admin"),
-		basicAuthPassword: env.GetString("BASIC_AUTH_PASSWORD", "password"),
+		basicAuth: basicAuthConfig{
+			username:       env.GetString("BASIC_AUTH_USERNAME", "admin"),
+			hashedPassword: env.GetString("BASIC_AUTH_HASHED_PASSWORD", "{{.BasicAuthHashedPassword}}"),
+		},
 {{- end}}
 {{- if .SecureCookies}}
-		cookieSecretKey:   env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
+		cookie: cookieConfig{
+			secretKey: env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
+		},
 {{- end}}
 {{- if .NeedsMailer}}
-		smtpHost:     env.GetString("SMTP_HOST", "localhost"),
-		smtpPort:     env.GetInt("SMTP_PORT", 25),
-		smtpUsername: env.GetString("SMTP_USERNAME", ""),
-		smtpPassword: env.GetString("SMTP_PASSWORD", ""),
-		smtpFrom:     env.GetString("SMTP_FROM", "noreply@localhost"),
+		smtp: smtpConfig{
+			host:     env.GetString("SMTP_HOST", "localhost"),
+			port:     env.GetInt("SMTP_PORT", 25),
+			username: env.GetString("SMTP_USERNAME", ""),
+			password: env.GetString("SMTP_PASSWORD", ""),
+			from:     env.GetString("SMTP_FROM", "noreply@localhost"),
+		},
 {{- end}}
 {{- if .ErrorNotifications}}
-		adminEmail: env.GetString("ADMIN_EMAIL", "admin@localhost"),
+		notifications: notificationsConfig{
+			email: env.GetString("NOTIFICATIONS_EMAIL", ""),
+		},
 {{- end}}
 {{- if .AutoHTTPS}}
-		httpsPort: env.GetInt("HTTPS_PORT", 443),
+		autoHTTPS: autoHTTPSConfig{
+			domain:  env.GetString("AUTO_HTTPS_DOMAIN", ""),
+			email:   env.GetString("AUTO_HTTPS_EMAIL", ""),
+			staging: env.GetBool("AUTO_HTTPS_STAGING", false),
+		},
+{{- end}}
+{{- if .AccountsJWT}}
+		jwt: jwtConfig{
+			secret: env.GetString("JWT_SECRET", "{{.CookieSecretKey}}"),
+		},
 {{- end}}
 	}
 {{- end}}
@@ -147,23 +164,24 @@ func run() error {
 
 {{- if .NeedsDB}}
 	// Initialize the database connection pool.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), database.DefaultTimeout)
 	defer cancel()
 
 	db, err := database.New(ctx, database.Config{
-		DSN:          cfg.dbDSN,
-		MaxOpenConns: cfg.dbMaxConns,
-		MaxIdleConns: cfg.dbMinConns,
-		MaxIdleTime:  cfg.dbMaxIdleTime,
+		DSN:          cfg.db.dsn,
+		MaxOpenConns: cfg.db.maxOpenConns,
+		MaxIdleConns: cfg.db.maxIdleConns,
+		MaxIdleTime:  cfg.db.maxIdleTime,
+		MaxLifetime:  cfg.db.maxLifetime,
 	})
 	if err != nil {
 		return fmt.Errorf("connecting to database: %w", err)
 	}
 	defer db.Close()
 
-	logger.Info("database connection pool established", "dsn", cfg.dbDSN)
+	logger.Info("database connection pool established", "dsn", cfg.db.dsn)
 {{- if .Migrations}}
-	if cfg.dbAutomigrate {
+	if cfg.db.automigrate {
 		if err := database.MigrateUp(db, assets.Migrations); err != nil {
 			return fmt.Errorf("running migrations: %w", err)
 		}
@@ -171,22 +189,21 @@ func run() error {
 	}
 {{- end}}
 {{- end}}
-
 {{- if .NeedsMailer}}
 
 	// Initialize the mailer with the embedded email templates and the
 	// configured SMTP settings.
-	mailer, err := mailer.New(logger, assets.EmailFiles, funcs.All(), cfg.smtpHost, cfg.smtpPort, cfg.smtpUsername, cfg.smtpPassword, cfg.smtpFrom)
+	mailer, err := mailer.New(logger, assets.EmailFiles, funcs.All(), cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
 		return fmt.Errorf("initializing mailer: %w", err)
 	}
 
-	logger.Info("mailer initialized", "host", cfg.smtpHost, "port", cfg.smtpPort)
+	logger.Info("mailer initialized", "host", cfg.smtp.host, "port", cfg.smtp.port)
 {{- end}}
 {{- if .AccountsJWT}}
 
 	// Initialize the JWT tokenizer for bearer-token authentication.
-	tokenizer, err := auth.NewTokenizer(cfg.jwtSecret)
+	tokenizer, err := auth.NewTokenizer(cfg.jwt.secret)
 	if err != nil {
 		return fmt.Errorf("initializing tokenizer: %w", err)
 	}
@@ -208,31 +225,7 @@ func run() error {
 {{- end}}
 	}
 
-	// Initialize a new http.Server instance with sensible timeout settings.
-	srv := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.httpPort),
-		Handler:      app.routes(),
-		IdleTimeout:  time.Minute,
-		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
-	}
-{{- if .AutoHTTPS}}
-
-	// Parse the base URL to determine the hostname for the TLS
-	// certificate. Automatic HTTPS via Let's Encrypt is enabled for real
-	// hostnames; local development falls back to plain HTTP.
-	u, err := url.Parse(cfg.baseURL)
-	if err != nil {
-		return fmt.Errorf("parsing base URL: %w", err)
-	}
-
-	certManager := &autocert.Manager{
-		Prompt:     autocert.AcceptTOS,
-		Cache:      autocert.DirCache("./tmp/certs"),
-		HostPolicy: autocert.HostWhitelist(u.Hostname()),
-	}
-{{- end}}
+	srv := app.newServer()
 
 	// Initialize a channel to receive any errors that occur during the
 	// graceful shutdown of the http.Server instance.
@@ -245,7 +238,7 @@ func run() error {
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 
-		logger.Info("shutting down server")
+		logger.Info("shutting down server", slog.Group("server", "addr", srv.Addr))
 
 		// Call Shutdown() on the server with a context, which will do a
 		// graceful shutdown without interrupting any active connections.
@@ -254,40 +247,21 @@ func run() error {
 		shutdownError <- srv.Shutdown(context.Background())
 	}()
 
-	logger.Info("starting server", "addr", srv.Addr)
+	logger.Info("starting server", slog.Group("server", "addr", srv.Addr))
 
+{{- if .AutoHTTPS}}
+	// When a domain is configured, serve over HTTPS with automatically
+	// managed certificates; otherwise serve plain HTTP.
+	if cfg.autoHTTPS.domain != "" {
+		err = app.serveAutoHTTPS(srv)
+	} else {
+		err = srv.ListenAndServe()
+	}
+{{- else}}
 	// Call ListenAndServe() to start the server. If it returns
 	// http.ErrServerClosed then that means the server was shut down
 	// gracefully and we can proceed; any other error is a problem.
-{{- if .AutoHTTPS}}
-	if u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1" {
-		logger.Warn("automatic HTTPS is disabled for local development; serving plain HTTP", "addr", srv.Addr)
-		{{- if .NeedsDB}}
-		err = srv.ListenAndServe()
-		{{- else}}
-		err := srv.ListenAndServe()
-		{{- end}}
-	} else {
-		// Serve the ACME HTTP-01 challenge and redirect plain HTTP
-		// traffic to HTTPS.
-		go func() {
-			redirectSrv := &http.Server{
-				Addr:    fmt.Sprintf(":%d", cfg.httpPort),
-				Handler: certManager.HTTPHandler(nil),
-			}
-			logger.Info("starting HTTP redirect server", "addr", redirectSrv.Addr)
-			if err := redirectSrv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
-				logger.Error("HTTP redirect server failed", "error", err)
-			}
-		}()
-
-		srv.Addr = fmt.Sprintf(":%d", cfg.httpsPort)
-		srv.TLSConfig = &tls.Config{GetCertificate: certManager.GetCertificate}
-		logger.Info("starting HTTPS server", "addr", srv.Addr)
-		err = srv.ListenAndServeTLS("", "")
-	}
-{{- else}}
-{{- if .NeedsDB}}
+{{- if or .NeedsDB .NeedsMailer .AccountsJWT}}
 	err = srv.ListenAndServe()
 {{- else}}
 	err := srv.ListenAndServe()
@@ -304,7 +278,7 @@ func run() error {
 		return err
 	}
 
-	logger.Info("stopped server", "addr", srv.Addr)
+	logger.Info("stopped server", slog.Group("server", "addr", srv.Addr))
 
 	return nil
 }
@@ -314,38 +288,96 @@ type config struct {
 	baseURL  string
 	httpPort int
 {{- if .NeedsDB}}
-	dbDSN         string
-	dbMaxConns    int
-	dbMinConns    int
-	dbMaxIdleTime time.Duration
-{{- if .Migrations}}
-	dbAutomigrate bool
-{{- end}}
+	db dbConfig
 {{- end}}
 {{- if .BasicAuth}}
-	basicAuthUsername string
-	basicAuthPassword string
+	basicAuth basicAuthConfig
 {{- end}}
 {{- if .SecureCookies}}
-	cookieSecretKey string
-{{- end}}
-{{- if .AccountsJWT}}
-	jwtSecret string
+	cookie cookieConfig
 {{- end}}
 {{- if .NeedsMailer}}
-	smtpHost     string
-	smtpPort     int
-	smtpUsername string
-	smtpPassword string
-	smtpFrom     string
+	smtp smtpConfig
 {{- end}}
 {{- if .ErrorNotifications}}
-	adminEmail string
+	notifications notificationsConfig
 {{- end}}
 {{- if .AutoHTTPS}}
-	httpsPort int
+	autoHTTPS autoHTTPSConfig
+{{- end}}
+{{- if .AccountsJWT}}
+	jwt jwtConfig
 {{- end}}
 }
+
+{{- if .NeedsDB}}
+
+// dbConfig holds the database connection pool settings.
+type dbConfig struct {
+	dsn          string
+	maxOpenConns int
+	maxIdleConns int
+	maxIdleTime  time.Duration
+	maxLifetime  time.Duration
+{{- if .Migrations}}
+	automigrate bool
+{{- end}}
+}
+{{- end}}
+{{- if .BasicAuth}}
+
+// basicAuthConfig holds the HTTP basic authentication credentials. The
+// password is stored as a bcrypt hash.
+type basicAuthConfig struct {
+	username       string
+	hashedPassword string
+}
+{{- end}}
+{{- if .SecureCookies}}
+
+// cookieConfig holds the secret key used for cookie signing and
+// encryption.
+type cookieConfig struct {
+	secretKey string
+}
+{{- end}}
+{{- if .NeedsMailer}}
+
+// smtpConfig holds the settings for the outgoing mail server.
+type smtpConfig struct {
+	host     string
+	port     int
+	username string
+	password string
+	from     string
+}
+{{- end}}
+{{- if .ErrorNotifications}}
+
+// notificationsConfig holds the recipient for error notification
+// emails.
+type notificationsConfig struct {
+	email string
+}
+{{- end}}
+{{- if .AutoHTTPS}}
+
+// autoHTTPSConfig holds the settings for automatically provisioned TLS
+// certificates.
+type autoHTTPSConfig struct {
+	domain  string
+	email   string
+	staging bool
+}
+{{- end}}
+{{- if .AccountsJWT}}
+
+// jwtConfig holds the secret key used for signing authentication
+// tokens.
+type jwtConfig struct {
+	secret string
+}
+{{- end}}
 
 // application holds the dependencies of the application. Handlers, helpers
 // and middleware are defined as methods on this type.
@@ -353,7 +385,7 @@ type application struct {
 	config config
 	logger *slog.Logger
 {{- if .NeedsDB}}
-	db     *sqlx.DB
+	db *sqlx.DB
 {{- end}}
 {{- if .NeedsMailer}}
 	mailer mailer.Mailer
@@ -363,7 +395,7 @@ type application struct {
 	users            database.UserModel
 	activationTokens database.ActivationTokenModel
 {{- end}}
-	wg     sync.WaitGroup
+	wg sync.WaitGroup
 }
 
 // newLogger returns a slog.Logger writing records to standard output in

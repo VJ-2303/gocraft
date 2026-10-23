@@ -7,29 +7,45 @@ import (
 	"text/template"
 )
 
-// HTMLRenderer renders the application's HTML page templates. Templates
-// are parsed once at initialization and cached, so rendering a page does
-// not re-parse template files on each request.
+// HTMLRenderer renders the application's HTML templates. Pages are
+// parsed once at initialization together with the base template and all
+// components, so rendering does not re-parse template files on each
+// request.
 type HTMLRenderer struct {
-	cache map[string]*template.Template
+	fsys     fs.FS
+	funcs    template.FuncMap
+	pages    map[string]*template.Template
+	partials map[string]*template.Template
 }
 
-// NewHTMLRenderer parses each named page template from fsys — together
-// with the base template and all component templates — and returns a
-// renderer with the parsed templates cached. The funcs map is made
-// available to all templates.
-func NewHTMLRenderer(fsys fs.FS, funcs template.FuncMap, pages ...string) (*HTMLRenderer, error) {
+// NewHTMLRenderer parses every page template in the pages/ and
+// pages/errors/ directories of fsys — together with the base template
+// and all component templates — and returns a renderer with the parsed
+// templates cached. The funcs map is made available to all templates.
+//
+// Pages define the page:title, page:main and (optionally) page:meta
+// blocks; components define uniquely named component:* blocks, which
+// are available to every page.
+func NewHTMLRenderer(fsys fs.FS, funcs template.FuncMap) (*HTMLRenderer, error) {
+	pages, err := fs.Glob(fsys, "pages/*.tmpl")
+	if err != nil {
+		return nil, fmt.Errorf("reading page templates: %w", err)
+	}
+
+	errorPages, err := fs.Glob(fsys, "pages/errors/*.tmpl")
+	if err != nil {
+		return nil, fmt.Errorf("reading error page templates: %w", err)
+	}
+	pages = append(pages, errorPages...)
+
 	cache := make(map[string]*template.Template, len(pages))
 
 	for _, page := range pages {
-		name := page
-		paths := []string{
+		tmpl, err := template.New("base").Funcs(funcs).ParseFS(fsys,
 			"base.tmpl",
 			"components/*.tmpl",
-			"pages/" + page,
-		}
-
-		tmpl, err := template.New(name).Funcs(funcs).ParseFS(fsys, paths...)
+			page,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("parsing template %s: %w", page, err)
 		}
@@ -37,19 +53,69 @@ func NewHTMLRenderer(fsys fs.FS, funcs template.FuncMap, pages ...string) (*HTML
 		cache[page] = tmpl
 	}
 
-	return &HTMLRenderer{cache: cache}, nil
+	return &HTMLRenderer{
+		fsys:     fsys,
+		funcs:    funcs,
+		pages:    cache,
+		partials: make(map[string]*template.Template),
+	}, nil
 }
 
-// Render writes an HTML response by executing the named page template with
+// RenderBase writes an HTML response by executing the named page
+// template (e.g. "pages/home.tmpl") together with the base layout, with
 // the given status code and data.
-func (h *HTMLRenderer) Render(w http.ResponseWriter, status int, page string, data any) error {
-	tmpl, ok := h.cache[page]
+func (h *HTMLRenderer) RenderBase(w http.ResponseWriter, status int, data any, page string) error {
+	return h.RenderBaseWithHeaders(w, status, data, nil, page)
+}
+
+// RenderBaseWithHeaders writes an HTML response like RenderBase, with
+// additional header values set on the response.
+func (h *HTMLRenderer) RenderBaseWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, page string) error {
+	tmpl, ok := h.pages[page]
 	if !ok {
 		return fmt.Errorf("template %q is not in the renderer cache", page)
 	}
 
+	setHeaders(w, headers)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 
 	return tmpl.ExecuteTemplate(w, "base", data)
+}
+
+// Render writes an HTML response containing only the named template
+// from the given file (e.g. "component:nav" from "components/nav.tmpl"),
+// without the base layout. Useful for rendering partials when working
+// with HTMX, Hotwire or Unpoly. Partials are parsed on first use and
+// cached.
+func (h *HTMLRenderer) Render(w http.ResponseWriter, status int, data any, name, file string) error {
+	return h.RenderWithHeaders(w, status, data, nil, name, file)
+}
+
+// RenderWithHeaders writes a partial HTML response like Render, with
+// additional header values set on the response.
+func (h *HTMLRenderer) RenderWithHeaders(w http.ResponseWriter, status int, data any, headers http.Header, name, file string) error {
+	tmpl, ok := h.partials[file]
+	if !ok {
+		tmpl, err := template.New("partial").Funcs(h.funcs).ParseFS(h.fsys, file)
+		if err != nil {
+			return fmt.Errorf("parsing template %s: %w", file, err)
+		}
+		h.partials[file] = tmpl
+	}
+
+	setHeaders(w, headers)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+
+	return tmpl.ExecuteTemplate(w, name, data)
+}
+
+// setHeaders adds each header value to the response.
+func setHeaders(w http.ResponseWriter, headers http.Header) {
+	for key, values := range headers {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
 }

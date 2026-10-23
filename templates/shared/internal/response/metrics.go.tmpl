@@ -1,0 +1,43 @@
+package response
+
+import (
+	"bufio"
+	"errors"
+	"net"
+	"net/http"
+)
+
+// MetricsResponseWriter captures the status code and body size of a
+// response, for logging by the request-logging middleware.
+type MetricsResponseWriter struct {
+	http.ResponseWriter
+
+	// Status is the status code written to the response.
+	Status int
+
+	// Size is the number of bytes written to the response body.
+	Size int
+}
+
+// WriteHeader records the status code before writing it.
+func (w *MetricsResponseWriter) WriteHeader(status int) {
+	w.Status = status
+	w.ResponseWriter.WriteHeader(status)
+}
+
+// Write records the number of bytes written to the body.
+func (w *MetricsResponseWriter) Write(b []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(b)
+	w.Size += n
+	return n, err
+}
+
+// Hijack supports connection upgrades for websockets; the recorded
+// metrics are simply frozen at upgrade time.
+func (w *MetricsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hijacker, ok := w.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer does not support hijacking")
+	}
+	return hijacker.Hijack()
+}

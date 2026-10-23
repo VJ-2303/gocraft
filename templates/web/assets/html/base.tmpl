@@ -4,16 +4,17 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>{{template "title" .}}</title>
+	<title>{{template "page:title" .}}</title>
+	{{template "page:meta" .}}
 	<link rel="stylesheet" href="/static/css/main.css">
 </head>
 <body>
 	<header>
 		<a class="site-title" href="/">My Application</a>
-		{{template "nav" .}}
+		{{template "component:nav" .}}
 	</header>
 	<main>
-		{{template "content" .}}
+		{{template "page:main" .}}
 	</main>
 	<footer>
 		<p>&copy; {{year}} My Application</p>
@@ -21,3 +22,5 @@
 </body>
 </html>
 {{end}}
+
+{{define "page:meta"}}{{end}}

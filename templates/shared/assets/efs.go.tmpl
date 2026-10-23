@@ -3,20 +3,19 @@ package assets
 
 import (
 	"embed"
-{{- if or (eq .AppType "web") .Migrations}}
 	"io/fs"
-{{- end}}
 )
 {{if eq .AppType "web"}}
 
-// FS holds the embedded assets. Static files are served from /static/ and
-// HTML templates are rendered from the html directory.
+// StaticFiles holds the embedded static files (CSS, JavaScript and
+// images), served from /static/, and the HTML templates.
 //
 //go:embed static html
-var FS embed.FS
+var StaticFiles embed.FS
 
-// HTML holds the embedded HTML templates, rooted at the html directory.
-var HTML = mustSub(FS, "html")
+// HTMLFiles holds the embedded HTML templates, rooted at the html
+// directory.
+var HTMLFiles = mustSub(StaticFiles, "html")
 {{end}}
 {{if .Migrations}}
 
