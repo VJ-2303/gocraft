@@ -43,6 +43,13 @@ func TestGateGenerate(t *testing.T) {
 			s.Migrations = true
 			return s
 		}(),
+		// Exercises a third-party router end to end.
+		"chiapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.Router = spec.RouterChi
+			s.Database = spec.DBSQLite
+			return s
+		}(),
 	}
 
 	for name, s := range specs {
@@ -465,5 +472,96 @@ func TestGenerateNoDatabasePackageWithoutDB(t *testing.T) {
 		if contains(result.Files, unwanted) {
 			t.Errorf("DB-less app should not include %s", unwanted)
 		}
+	}
+}
+
+func TestGenerateAllRouters(t *testing.T) {
+	tests := []struct {
+		router     spec.Router
+		wantImport string // quoted import in routes.go
+		wantMod    string // unquoted module path in go.mod
+		wantRoute  string
+	}{
+		{spec.RouterServeMux, "", "", `"GET /v1/healthcheck"`},
+		{spec.RouterFlow, `"github.com/alexedwards/flow/v2"`, "github.com/alexedwards/flow/v2", `http.MethodGet, "/v1/healthcheck"`},
+		{spec.RouterChi, `"github.com/go-chi/chi/v5"`, "github.com/go-chi/chi/v5", `mux.Get("/v1/healthcheck"`},
+		{spec.RouterGorilla, `"github.com/gorilla/mux"`, "github.com/gorilla/mux", `Methods(http.MethodGet)`},
+		{spec.RouterHttpRouter, `"github.com/julienschmidt/httprouter"`, "github.com/julienschmidt/httprouter", `mux.GET("/v1/healthcheck"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.router), func(t *testing.T) {
+			s := testSpec()
+			s.AppType = spec.AppAPI
+			s.Router = tt.router
+			rsp := resolveFor(t, s)
+
+			target := filepath.Join(t.TempDir(), "example")
+			if _, err := Generate(rsp, target, slog.Default(), Options{}); err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+
+			got, err := os.ReadFile(filepath.Join(target, "cmd/api/routes.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.wantImport != "" && !strings.Contains(string(got), tt.wantImport) {
+				t.Errorf("routes.go want import %q, got:\n%s", tt.wantImport, got)
+			}
+			if !strings.Contains(string(got), tt.wantRoute) {
+				t.Errorf("routes.go want route %q, got:\n%s", tt.wantRoute, got)
+			}
+
+			// The router dependency must appear in go.mod for third-party
+			// routers.
+			gomod, err := os.ReadFile(filepath.Join(target, "go.mod"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.wantMod != "" && !strings.Contains(string(gomod), tt.wantMod) {
+				t.Errorf("go.mod want %q", tt.wantMod)
+			}
+			if tt.router == spec.RouterServeMux && strings.Contains(string(gomod), "gorilla") {
+				t.Error("servemux app must not require external router")
+			}
+		})
+	}
+}
+
+func TestGenerateWebRoutersServeStatic(t *testing.T) {
+	tests := []struct {
+		router     spec.Router
+		wantStatic string
+	}{
+		{spec.RouterServeMux, `"GET /static/"`},
+		{spec.RouterFlow, `"/static/"`},
+		{spec.RouterChi, `"/static/*"`},
+		{spec.RouterGorilla, `PathPrefix("/static/")`},
+		{spec.RouterHttpRouter, `"/static/*filepath"`},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.router), func(t *testing.T) {
+			s := testSpec()
+			s.Router = tt.router
+			rsp := resolveFor(t, s)
+
+			target := filepath.Join(t.TempDir(), "example")
+			if _, err := Generate(rsp, target, slog.Default(), Options{}); err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+
+			got, err := os.ReadFile(filepath.Join(target, "cmd/web/routes.go"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(string(got), tt.wantStatic) {
+				t.Errorf("routes.go want static %q, got:\n%s", tt.wantStatic, got)
+			}
+			if !strings.Contains(string(got), "app.home") {
+				t.Errorf("routes.go want home handler, got:\n%s", got)
+			}
+		})
 	}
 }

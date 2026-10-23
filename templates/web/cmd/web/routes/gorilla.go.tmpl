@@ -1,0 +1,23 @@
+// The application's route table: URL-to-handler mappings and middleware
+// assignment.
+package main
+
+import (
+	"net/http"
+
+	"github.com/gorilla/mux"
+)
+
+// routes initializes the application's routes and middleware, and returns
+// a http.Handler ready to serve requests.
+func (app *application) routes() http.Handler {
+	mux := mux.NewRouter()
+
+	// Serve static files from the embedded assets.
+	mux.PathPrefix("/static/").Handler(http.FileServerFS(app.assets))
+
+	// Application routes.
+	mux.HandleFunc("/", app.home).Methods(http.MethodGet)
+
+	return mux
+}
