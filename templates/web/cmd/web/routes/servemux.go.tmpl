@@ -17,5 +17,15 @@ func (app *application) routes() http.Handler {
 	// Application routes.
 	mux.HandleFunc("GET /{$}", app.home)
 
-	return mux
+	// Apply the middleware chain, from the outside in.
+	var handler http.Handler = mux
+{{- if .BasicAuth}}
+	handler = app.basicAuth(handler)
+{{- end}}
+{{- if .RequestLogging}}
+	handler = app.logRequest(handler)
+{{- end}}
+	handler = app.recoverPanic(app.secureHeaders(handler))
+
+	return handler
 }

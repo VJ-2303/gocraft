@@ -50,6 +50,18 @@ func TestGateGenerate(t *testing.T) {
 			s.Database = spec.DBSQLite
 			return s
 		}(),
+		// Exercises the env config source, colorized logs, request
+		// logging and basic auth.
+		"envapi": func() spec.ProjectSpec {
+			s := testSpec()
+			s.AppType = spec.AppAPI
+			s.ConfigSource = spec.ConfigEnv
+			s.LogFormat = spec.LogColorized
+			s.RequestLogging = true
+			s.BasicAuth = true
+			s.Router = spec.RouterHttpRouter
+			return s
+		}(),
 	}
 
 	for name, s := range specs {
@@ -561,6 +573,80 @@ func TestGenerateWebRoutersServeStatic(t *testing.T) {
 			}
 			if !strings.Contains(string(got), "app.home") {
 				t.Errorf("routes.go want home handler, got:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestGenerateEnvConfigAndLogVariants(t *testing.T) {
+	tests := []struct {
+		name     string
+		mutate   func(*spec.ProjectSpec)
+		wantFile string
+		checks   map[string]string // file → expected substring
+	}{
+		{
+			name:     "env config source",
+			mutate:   func(s *spec.ProjectSpec) { s.ConfigSource = spec.ConfigEnv },
+			wantFile: "internal/env/env.go",
+			checks: map[string]string{
+				"cmd/web/main.go": `env.GetString("BASE_URL"`,
+			},
+		},
+		{
+			name:     "json logs",
+			mutate:   func(s *spec.ProjectSpec) { s.LogFormat = spec.LogJSON },
+			wantFile: "",
+			checks: map[string]string{
+				"cmd/web/main.go": "slog.NewJSONHandler",
+			},
+		},
+		{
+			name:     "colorized logs",
+			mutate:   func(s *spec.ProjectSpec) { s.LogFormat = spec.LogColorized },
+			wantFile: "internal/log/colorized.go",
+			checks: map[string]string{
+				"cmd/web/main.go": "log.NewColorizedHandler",
+			},
+		},
+		{
+			name: "request logging and basic auth",
+			mutate: func(s *spec.ProjectSpec) {
+				s.RequestLogging = true
+				s.BasicAuth = true
+			},
+			wantFile: "cmd/web/middleware.go",
+			checks: map[string]string{
+				"cmd/web/middleware.go": "func (app *application) basicAuth(",
+				"cmd/web/routes.go":     "app.logRequest(handler)",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := testSpec()
+			tt.mutate(&s)
+			rsp := resolveFor(t, s)
+
+			target := filepath.Join(t.TempDir(), "example")
+			result, err := Generate(rsp, target, slog.Default(), Options{})
+			if err != nil {
+				t.Fatalf("generate: %v", err)
+			}
+
+			if tt.wantFile != "" && !contains(result.Files, tt.wantFile) {
+				t.Errorf("want generated file %s, got %v", tt.wantFile, result.Files)
+			}
+
+			for file, want := range tt.checks {
+				got, err := os.ReadFile(filepath.Join(target, file))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if !strings.Contains(string(got), want) {
+					t.Errorf("%s want substring %q", file, want)
+				}
 			}
 		})
 	}
