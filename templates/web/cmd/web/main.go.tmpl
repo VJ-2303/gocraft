@@ -19,6 +19,13 @@ import (
 	"{{.ModulePath}}/assets"
 	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/response"
+{{- if .NeedsDB}}
+	_ "{{.Driver.ImportPath}}"
+
+	"github.com/jmoiron/sqlx"
+
+	"{{.ModulePath}}/internal/database"
+{{- end}}
 )
 
 func main() {
@@ -37,10 +44,46 @@ func run() error {
 
 	flag.StringVar(&cfg.baseURL, "base-url", "http://localhost:{{.Port}}", "base URL for the application")
 	flag.IntVar(&cfg.httpPort, "http-port", {{.Port}}, "port to serve the application on")
+{{- if .NeedsDB}}
+	flag.StringVar(&cfg.dbDSN, "db-dsn", "{{.Driver.ExampleDSN}}", "database DSN")
+	flag.IntVar(&cfg.dbMaxConns, "db-max-conns", 25, "maximum open database connections")
+	flag.IntVar(&cfg.dbMinConns, "db-min-conns", 0, "minimum idle database connections")
+	flag.DurationVar(&cfg.dbMaxIdleTime, "db-max-idle-time", 15*time.Minute, "maximum idle time for database connections")
+{{- if .Migrations}}
+	flag.BoolVar(&cfg.dbAutomigrate, "db-automigrate", true, "apply up migrations automatically on startup")
+{{- end}}
+{{- end}}
 	flag.Parse()
 
 	// Initialize a logger writing to standard output.
 	logger := newLogger()
+
+{{- if .NeedsDB}}
+	// Initialize the database connection pool.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	db, err := database.New(ctx, database.Config{
+		DSN:          cfg.dbDSN,
+		MaxOpenConns: cfg.dbMaxConns,
+		MaxIdleConns: cfg.dbMinConns,
+		MaxIdleTime:  cfg.dbMaxIdleTime,
+	})
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	defer db.Close()
+
+	logger.Info("database connection pool established", "dsn", cfg.dbDSN)
+{{- if .Migrations}}
+	if cfg.dbAutomigrate {
+		if err := database.MigrateUp(db, assets.MigrationFiles); err != nil {
+			return fmt.Errorf("running migrations: %w", err)
+		}
+		logger.Info("database migrations applied")
+	}
+{{- end}}
+{{- end}}
 
 	// Initialize the dependencies of the application.
 	templateRenderer, err := response.NewHTMLRenderer(assets.HTML, funcs.All(),
@@ -53,10 +96,13 @@ func run() error {
 	}
 
 	app := &application{
-		config:     cfg,
-		logger:     logger,
-		assets:     assets.FS,
-		templates:  templateRenderer,
+		config:    cfg,
+		logger:    logger,
+		assets:    assets.FS,
+		templates: templateRenderer,
+{{- if .NeedsDB}}
+		db:        db,
+{{- end}}
 	}
 
 	// Initialize a new http.Server instance with sensible timeout settings.
@@ -116,6 +162,15 @@ func run() error {
 type config struct {
 	baseURL  string
 	httpPort int
+{{- if .NeedsDB}}
+	dbDSN         string
+	dbMaxConns    int
+	dbMinConns    int
+	dbMaxIdleTime time.Duration
+{{- if .Migrations}}
+	dbAutomigrate bool
+{{- end}}
+{{- end}}
 }
 
 // application holds the dependencies of the application. Handlers, helpers
@@ -125,6 +180,9 @@ type application struct {
 	logger    *slog.Logger
 	assets    embed.FS
 	templates *response.HTMLRenderer
+{{- if .NeedsDB}}
+	db        *sqlx.DB
+{{- end}}
 	wg        sync.WaitGroup
 }
 

@@ -70,7 +70,7 @@ func Run(ctx context.Context, logger *slog.Logger, version string) error {
 	}
 
 	result, err := runWithSpinner(ctx, func() (generator.Result, error) {
-		return generator.Generate(rsp, target, logger)
+		return generator.Generate(rsp, target, logger, generator.Options{Tidy: true})
 	})
 	if err != nil {
 		return err

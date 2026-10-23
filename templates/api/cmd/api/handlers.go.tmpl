@@ -3,6 +3,10 @@
 package main
 
 import (
+{{- if .NeedsDB}}
+	"context"
+	"time"
+{{- end}}
 	"net/http"
 
 	"{{.ModulePath}}/internal/response"
@@ -16,6 +20,24 @@ func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
 		"version":  version.Get(),
 		"revision": version.GetRevision(),
 	}
+{{- if .NeedsDB}}
+
+	// Check that the database connection is still alive.
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	if err := app.db.PingContext(ctx); err != nil {
+		data["status"] = "unavailable"
+		app.serverError(w, r, err)
+		return
+	}
+
+	data["db"] = map[string]any{
+		"max_open_conns": app.db.Stats().MaxOpenConnections,
+		"open_conns":     app.db.Stats().OpenConnections,
+		"in_use":         app.db.Stats().InUse,
+	}
+{{- end}}
 
 	err := response.WriteJSON(w, http.StatusOK, data, nil)
 	if err != nil {

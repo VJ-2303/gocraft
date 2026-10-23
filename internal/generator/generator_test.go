@@ -27,12 +27,28 @@ func TestGateGenerate(t *testing.T) {
 			s.AppType = spec.AppAPI
 			return s
 		}(),
+		// Exercises the database package, embedded migrations and
+		// external dependency resolution.
+		"sqliteapp": func() spec.ProjectSpec {
+			s := testSpec()
+			s.Database = spec.DBSQLite
+			s.Migrations = true
+			return s
+		}(),
+		// Exercises the api assets package without the web-only embeds.
+		"apimigrations": func() spec.ProjectSpec {
+			s := testSpec()
+			s.AppType = spec.AppAPI
+			s.Database = spec.DBPostgres
+			s.Migrations = true
+			return s
+		}(),
 	}
 
 	for name, s := range specs {
 		t.Run(name, func(t *testing.T) {
 			rsp := resolveFor(t, s)
-			if _, err := Generate(rsp, filepath.Join(gateDir, name), slog.Default()); err != nil {
+			if _, err := Generate(rsp, filepath.Join(gateDir, name), slog.Default(), Options{Tidy: true}); err != nil {
 				t.Fatalf("generate: %v", err)
 			}
 		})
@@ -79,7 +95,7 @@ func TestGenerateWritesRootFiles(t *testing.T) {
 	target := filepath.Join(dir, "example")
 
 	rsp := resolveFor(t, testSpec())
-	result, err := Generate(rsp, target, slog.Default())
+	result, err := Generate(rsp, target, slog.Default(), Options{})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -99,7 +115,7 @@ func TestGenerateWebApp(t *testing.T) {
 	target := filepath.Join(dir, "example")
 
 	rsp := resolveFor(t, testSpec())
-	result, err := Generate(rsp, target, slog.Default())
+	result, err := Generate(rsp, target, slog.Default(), Options{})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -150,7 +166,7 @@ func TestGenerateAPIApp(t *testing.T) {
 	s.AppType = spec.AppAPI
 	rsp := resolveFor(t, s)
 
-	result, err := Generate(rsp, target, slog.Default())
+	result, err := Generate(rsp, target, slog.Default(), Options{})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -194,7 +210,7 @@ func TestGenerateGoModContents(t *testing.T) {
 	rsp := resolveFor(t, s)
 
 	target := filepath.Join(dir, "example")
-	if _, err := Generate(rsp, target, slog.Default()); err != nil {
+	if _, err := Generate(rsp, target, slog.Default(), Options{}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
@@ -225,7 +241,7 @@ func TestGenerateGitignoreOnlyWhenRequested(t *testing.T) {
 	rsp.GitIntegration = false
 
 	target := filepath.Join(dir, "example")
-	result, err := Generate(rsp, target, slog.Default())
+	result, err := Generate(rsp, target, slog.Default(), Options{})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -237,7 +253,7 @@ func TestGenerateGitignoreOnlyWhenRequested(t *testing.T) {
 
 	rsp.GitIntegration = true
 	target2 := filepath.Join(dir, "example2")
-	result2, err := Generate(rsp, target2, slog.Default())
+	result2, err := Generate(rsp, target2, slog.Default(), Options{})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -261,7 +277,7 @@ func TestGenerateMakefileMigrations(t *testing.T) {
 	rsp := resolveFor(t, s)
 
 	target := filepath.Join(dir, "example")
-	if _, err := Generate(rsp, target, slog.Default()); err != nil {
+	if _, err := Generate(rsp, target, slog.Default(), Options{}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 
@@ -285,7 +301,7 @@ func TestGenerateMakefileMigrations(t *testing.T) {
 	s.Migrations = false
 	rsp2 := resolveFor(t, s)
 	target2 := filepath.Join(dir, "example2")
-	if _, err := Generate(rsp2, target2, slog.Default()); err != nil {
+	if _, err := Generate(rsp2, target2, slog.Default(), Options{}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 	got2, err := os.ReadFile(filepath.Join(target2, "Makefile"))
@@ -308,7 +324,7 @@ func TestGenerateRejectsNonEmptyTarget(t *testing.T) {
 	}
 
 	rsp := resolveFor(t, testSpec())
-	if _, err := Generate(rsp, target, slog.Default()); err == nil {
+	if _, err := Generate(rsp, target, slog.Default(), Options{}); err == nil {
 		t.Fatal("expected an error for a non-empty target, got nil")
 	}
 }
@@ -321,7 +337,7 @@ func TestGenerateAllowsEmptyExistingTarget(t *testing.T) {
 	}
 
 	rsp := resolveFor(t, testSpec())
-	if _, err := Generate(rsp, target, slog.Default()); err != nil {
+	if _, err := Generate(rsp, target, slog.Default(), Options{}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
 }
@@ -337,10 +353,117 @@ func TestGenerateRejectsInvalidSpec(t *testing.T) {
 	rsp := spec.ResolvedSpec{ProjectSpec: s}
 
 	target := filepath.Join(dir, "example")
-	if _, err := Generate(rsp, target, slog.Default()); err == nil {
+	if _, err := Generate(rsp, target, slog.Default(), Options{}); err == nil {
 		t.Fatal("expected generate error for invalid spec")
 	}
 	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Errorf("target directory should not exist, got err %v", err)
+	}
+}
+
+func TestGenerateSQLiteAppWithMigrations(t *testing.T) {
+	dir := t.TempDir()
+
+	s := testSpec()
+	s.Database = spec.DBSQLite
+	s.Migrations = true
+	rsp := resolveFor(t, s)
+
+	target := filepath.Join(dir, "example")
+	result, err := Generate(rsp, target, slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	for _, want := range []string{
+		"internal/database/database.go",
+		"assets/migrations/000001_init.up.sql",
+		"assets/migrations/000001_init.down.sql",
+		"assets/efs.go",
+	} {
+		if !contains(result.Files, want) {
+			t.Errorf("want generated file %s, got %v", want, result.Files)
+		}
+	}
+
+	main, err := os.ReadFile(filepath.Join(target, "cmd/web/main.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"db-dsn"`,
+		`"db-automigrate"`,
+		"database.New(",
+		"database.MigrateUp(db, assets.MigrationFiles)",
+		"db:        db,",
+	} {
+		if !strings.Contains(string(main), want) {
+			t.Errorf("cmd/web/main.go want substring %q", want)
+		}
+	}
+
+	gomod, err := os.ReadFile(filepath.Join(target, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"github.com/jmoiron/sqlx", "modernc.org/sqlite"} {
+		if !strings.Contains(string(gomod), want) {
+			t.Errorf("go.mod want %q", want)
+		}
+	}
+}
+
+func TestGenerateAPIMigrationsOmitWebAssets(t *testing.T) {
+	dir := t.TempDir()
+
+	s := testSpec()
+	s.AppType = spec.AppAPI
+	s.Database = spec.DBMySQL
+	s.Migrations = true
+	rsp := resolveFor(t, s)
+
+	target := filepath.Join(dir, "example")
+	_, err := Generate(rsp, target, slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	// The assets package must exist for migrations but must not embed the
+	// web-only static and html directories.
+	efs, err := os.ReadFile(filepath.Join(target, "assets/efs.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(efs), "MigrationFiles") {
+		t.Error("api efs.go want MigrationFiles embed")
+	}
+	if strings.Contains(string(efs), "go:embed static") {
+		t.Error("api efs.go must not embed static assets")
+	}
+
+	// The healthcheck must include the database check.
+	handlers, err := os.ReadFile(filepath.Join(target, "cmd/api/handlers.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(handlers), "PingContext") {
+		t.Error("api handlers.go want database ping in healthcheck")
+	}
+}
+
+func TestGenerateNoDatabasePackageWithoutDB(t *testing.T) {
+	dir := t.TempDir()
+
+	rsp := resolveFor(t, testSpec())
+	target := filepath.Join(dir, "example")
+	result, err := Generate(rsp, target, slog.Default(), Options{})
+	if err != nil {
+		t.Fatalf("generate: %v", err)
+	}
+
+	for _, unwanted := range []string{"internal/database/database.go", "assets/migrations/000001_init.up.sql"} {
+		if contains(result.Files, unwanted) {
+			t.Errorf("DB-less app should not include %s", unwanted)
+		}
 	}
 }

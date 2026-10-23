@@ -1,11 +1,13 @@
-// Package assets embeds the non-code assets of the application: static
-// files and HTML templates.
+// Package assets embeds the non-code assets of the application.
 package assets
 
 import (
 	"embed"
+{{- if eq .AppType "web"}}
 	"io/fs"
+{{- end}}
 )
+{{if eq .AppType "web"}}
 
 // FS holds the embedded assets. Static files are served from /static/ and
 // HTML templates are rendered from the html directory.
@@ -15,6 +17,16 @@ var FS embed.FS
 
 // HTML holds the embedded HTML templates, rooted at the html directory.
 var HTML = mustSub(FS, "html")
+{{end}}
+{{if .Migrations}}
+
+// MigrationFiles holds the embedded SQL migrations, rooted at the
+// migrations directory.
+//
+//go:embed migrations
+var MigrationFiles embed.FS
+{{end}}
+{{if eq .AppType "web"}}
 
 func mustSub(fsys fs.FS, dir string) fs.FS {
 	sub, err := fs.Sub(fsys, dir)
@@ -23,3 +35,4 @@ func mustSub(fsys fs.FS, dir string) fs.FS {
 	}
 	return sub
 }
+{{end}}
