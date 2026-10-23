@@ -1,0 +1,21 @@
+{{define "subject"}}{{.Error}}{{end}}
+
+{{define "plainBody"}}
+A runtime error occurred.
+
+Method: {{.Method}}
+URI: {{.URI}}
+Error: {{.Error}}
+
+Trace:
+
+{{.Trace}}
+{{end}}
+
+{{define "htmlBody"}}
+<p>A runtime error occurred.</p>
+<p>Method: {{.Method}}<br>
+URI: {{.URI}}<br>
+Error: {{.Error}}</p>
+<pre>{{.Trace}}</pre>
+{{end}}

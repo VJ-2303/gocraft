@@ -48,6 +48,10 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/assets/migrations/000002_create_sessions_table.down.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.down.sql", Cond: rsp.Sessions},
 
 		{Template: "shared/internal/cookies/cookies.go.tmpl", OutPath: "internal/cookies/cookies.go", Cond: rsp.SecureCookies},
+		{Template: "shared/internal/mailer/mailer.go.tmpl", OutPath: "internal/mailer/mailer.go", Cond: rsp.NeedsMailer},
+
+		{Template: "shared/assets/emails/example.tmpl", OutPath: "assets/emails/example.tmpl", Cond: rsp.NeedsMailer, Copy: true},
+		{Template: "shared/assets/emails/error-notification.tmpl", OutPath: "assets/emails/error-notification.tmpl", Cond: rsp.ErrorNotifications, Copy: true},
 	}
 
 	files = append(files, appFiles(rsp)...)
@@ -81,6 +85,7 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "web/assets/html/base.tmpl", OutPath: "assets/html/base.tmpl", Cond: true, Copy: true},
 		{Template: "web/assets/html/components/nav.tmpl", OutPath: "assets/html/components/nav.tmpl", Cond: true, Copy: true},
 		{Template: "web/assets/html/pages/home.tmpl", OutPath: "assets/html/pages/home.tmpl", Cond: true, Copy: true},
+		{Template: "web/assets/html/pages/error.tmpl", OutPath: "assets/html/pages/error.tmpl", Cond: rsp.CustomErrorPages, Copy: true},
 
 		{Template: "web/cmd/web/main.go.tmpl", OutPath: "cmd/web/main.go", Cond: true},
 		{Template: "web/cmd/web/middleware.go.tmpl", OutPath: "cmd/web/middleware.go", Cond: true},

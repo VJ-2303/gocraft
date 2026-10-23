@@ -29,6 +29,14 @@ var MigrationFiles embed.FS
 // directory.
 var Migrations = mustSub(MigrationFiles, "migrations")
 {{end}}
+{{if .NeedsMailer}}
+
+// EmailFiles holds the embedded email templates, rooted at the emails
+// directory.
+//
+//go:embed emails
+var EmailFiles embed.FS
+{{end}}
 {{if or (eq .AppType "web") .Migrations}}
 
 func mustSub(fsys fs.FS, dir string) fs.FS {

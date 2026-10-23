@@ -17,6 +17,9 @@ func (app *application) routes() http.Handler {
 	mux.Handler(http.MethodGet, "/static/*filepath", http.FileServerFS(app.assets))
 
 	// Application routes.
+
+	// Any other path is not found.
+	mux.NotFound = http.HandlerFunc(app.notFound)
 	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.home(w, r)
 	})

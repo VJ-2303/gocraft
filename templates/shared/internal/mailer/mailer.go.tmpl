@@ -1,0 +1,123 @@
+// Package mailer sends emails using SMTP, rendering templates from the
+// embedded email files.
+package mailer
+
+import (
+	"bytes"
+	"fmt"
+	"html/template"
+	"log/slog"
+	"io/fs"
+	"strings"
+	"time"
+
+	"github.com/wneessen/go-mail"
+)
+
+// Mailer sends emails defined as templates in the embedded email files.
+// Each template file defines a subject block, a plainBody block and an
+// optional htmlBody block.
+type Mailer struct {
+	client    *mail.Client
+	sender    string
+	templates map[string]*template.Template
+	logger    *slog.Logger
+}
+
+// New initializes a Mailer with an SMTP client and the parsed email
+// templates from emailFiles.
+func New(logger *slog.Logger, emailFiles fs.FS, host string, port int, username, password, sender string) (Mailer, error) {
+	// Parse all email templates once at initialization.
+	templates := make(map[string]*template.Template)
+
+	pages, err := fs.Glob(emailFiles, "*.tmpl")
+	if err != nil {
+		return Mailer{}, fmt.Errorf("reading email templates: %w", err)
+	}
+
+	for _, page := range pages {
+		name := strings.TrimSuffix(page, ".tmpl")
+
+		tmpl, err := template.New(name).ParseFS(emailFiles, page)
+		if err != nil {
+			return Mailer{}, fmt.Errorf("parsing email template %s: %w", page, err)
+		}
+
+		templates[name] = tmpl
+	}
+
+	// Build the SMTP client options, including authentication only when
+	// credentials are configured.
+	opts := []mail.Option{
+		mail.WithPort(port),
+		mail.WithTimeout(5 * time.Second),
+	}
+	if username != "" && password != "" {
+		opts = append(opts,
+			mail.WithSMTPAuth(mail.SMTPAuthPlain),
+			mail.WithUsername(username),
+			mail.WithPassword(password),
+		)
+	}
+
+	client, err := mail.NewClient(host, opts...)
+	if err != nil {
+		return Mailer{}, fmt.Errorf("creating mail client: %w", err)
+	}
+
+	return Mailer{
+		client:    client,
+		sender:    sender,
+		templates: templates,
+		logger:    logger,
+	}, nil
+}
+
+// Send renders the named email template with the provided data and sends
+// the resulting email to recipient.
+func (m Mailer) Send(recipient string, data any, tmplFile string) error {
+	tmpl, ok := m.templates[tmplFile]
+	if !ok {
+		return fmt.Errorf("email template %q is not in the mailer cache", tmplFile)
+	}
+
+	subject := new(bytes.Buffer)
+	err := tmpl.ExecuteTemplate(subject, "subject", data)
+	if err != nil {
+		return fmt.Errorf("executing %s subject template: %w", tmplFile, err)
+	}
+
+	plainBody := new(bytes.Buffer)
+	err = tmpl.ExecuteTemplate(plainBody, "plainBody", data)
+	if err != nil {
+		return fmt.Errorf("executing %s plainBody template: %w", tmplFile, err)
+	}
+
+	msg := mail.NewMsg()
+	if err := msg.From(m.sender); err != nil {
+		return fmt.Errorf("setting sender: %w", err)
+	}
+	if err := msg.To(recipient); err != nil {
+		return fmt.Errorf("setting recipient: %w", err)
+	}
+	msg.Subject(subject.String())
+	msg.SetBodyString(mail.TypeTextPlain, plainBody.String())
+
+	// Add the HTML alternative if the template defines an htmlBody block.
+	htmlBody := new(bytes.Buffer)
+	err = tmpl.ExecuteTemplate(htmlBody, "htmlBody", data)
+	if err == nil && htmlBody.Len() > 0 {
+		msg.AddAlternativeString(mail.TypeTextHTML, htmlBody.String())
+	}
+
+	// The DialAndSend timeout is 5 seconds; retries are left to the
+	// caller, which is why Send is often invoked via backgroundTask.
+	err = m.client.DialAndSend(msg)
+	if err != nil {
+		m.logger.Error("sending email", "recipient", recipient, "template", tmplFile, "error", err)
+		return fmt.Errorf("sending email: %w", err)
+	}
+
+	m.logger.Info("email sent", "recipient", recipient, "template", tmplFile)
+	return nil
+}

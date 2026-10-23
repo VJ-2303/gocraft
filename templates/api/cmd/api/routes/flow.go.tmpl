@@ -4,7 +4,7 @@ package main
 import (
 	"net/http"
 
-	"github.com/alexedwards/flow/v2"
+	"github.com/alexedwards/flow"
 )
 
 // routes initializes the API's routes and middleware, and returns a
@@ -12,7 +12,7 @@ import (
 func (app *application) routes() http.Handler {
 	mux := flow.New()
 
-	mux.HandleFunc(http.MethodGet, "/v1/healthcheck", app.healthcheck)
+	mux.HandleFunc("/v1/healthcheck", app.healthcheck, http.MethodGet)
 
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux

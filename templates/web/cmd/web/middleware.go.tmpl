@@ -62,7 +62,7 @@ func (app *application) basicAuth(next http.Handler) http.Handler {
 		username, password, ok := r.BasicAuth()
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-			app.clientError(w, http.StatusUnauthorized)
+			app.clientError(w, r, http.StatusUnauthorized)
 			return
 		}
 
@@ -71,7 +71,7 @@ func (app *application) basicAuth(next http.Handler) http.Handler {
 
 		if !usernameMatches || !passwordMatches {
 			w.Header().Set("WWW-Authenticate", `Basic realm="restricted", charset="UTF-8"`)
-			app.clientError(w, http.StatusUnauthorized)
+			app.clientError(w, r, http.StatusUnauthorized)
 			return
 		}
 

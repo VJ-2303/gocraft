@@ -1,0 +1,15 @@
+{{define "title"}}{{.Status}} {{.StatusText}}{{end}}
+
+{{define "content"}}
+<h1>{{.Status}} — {{.StatusText}}</h1>
+<p>{{.Message}}</p>
+{{if eq .Status 404}}
+<p>The page you are looking for may have been moved or deleted. Head back
+to the <a href="/">home page</a>.</p>
+{{else if eq .Status 500}}
+<p>The problem has been logged{{if .ErrorNotifications}} and our team has
+been notified{{end}}. Please try again in a few moments.</p>
+{{else}}
+<p>Please try again, or head back to the <a href="/">home page</a>.</p>
+{{end}}
+{{end}}

@@ -10,22 +10,67 @@ import (
 	"{{.ModulePath}}/internal/version"
 )
 
-// serverError logs an error and sends a 500 Internal Server Error response
-// to the client.
+// serverError logs an error, optionally emails an error notification to
+// the administrator, and sends a 500 Internal Server Error response to
+// the client.
 func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
 	method := r.Method
 	uri := r.URL.RequestURI()
+	trace := string(debug.Stack())
 
-	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", string(debug.Stack()))
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", trace)
 
-	app.clientError(w, http.StatusInternalServerError)
+{{- if .ErrorNotifications}}
+	app.backgroundTask(func() error {
+		data := app.defaultEmailData()
+		data["Method"] = method
+		data["URI"] = uri
+		data["Trace"] = trace
+		data["Error"] = err.Error()
+
+		return app.mailer.Send(app.config.adminEmail, data, "error-notification.tmpl")
+	})
+{{- end}}
+{{- if .CustomErrorPages}}
+
+	app.clientError(w, r, http.StatusInternalServerError)
+{{- else}}
+
+	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+{{- end}}
 }
 
-// clientError sends a specific status code and corresponding message to
-// the client.
-func (app *application) clientError(w http.ResponseWriter, status int) {
+// clientError sends a specific status code to the client, rendering the
+// custom error page when enabled.
+func (app *application) clientError(w http.ResponseWriter, r *http.Request, status int) {
+{{- if .CustomErrorPages}}
+	data := app.defaultHTMLData(r)
+	data["Status"] = status
+	data["StatusText"] = http.StatusText(status)
+	data["Message"] = fmt.Sprintf("The request could not be completed: %s.", http.StatusText(status))
+
+	app.render(w, r, status, "error.tmpl", data)
+{{- else}}
 	http.Error(w, http.StatusText(status), status)
+{{- end}}
 }
+
+// notFound sends a 404 Not Found response to the client.
+func (app *application) notFound(w http.ResponseWriter, r *http.Request) {
+	app.clientError(w, r, http.StatusNotFound)
+}
+
+{{- if .NeedsMailer}}
+
+// defaultEmailData returns a map with common data shared by all email
+// templates. Additional template-specific data can be added to the map by
+// the caller.
+func (app *application) defaultEmailData() templateData {
+	return templateData{
+		"BaseURL": app.config.baseURL,
+	}
+}
+{{- end}}
 
 // defaultHTMLData returns a map with common data shared by all HTML
 // templates. Additional template-specific data can be added to the map by
@@ -36,6 +81,8 @@ func (app *application) defaultHTMLData(r *http.Request) templateData {
 		"Year":     time.Now().Year(),
 		"Version":  version.Get(),
 		"Revision": version.GetRevision(),
+
+		"ErrorNotifications": {{if .ErrorNotifications}}true{{else}}false{{end}},
 	}
 }
 
