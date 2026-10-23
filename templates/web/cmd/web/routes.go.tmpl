@@ -1,0 +1,21 @@
+// The application's route table: URL-to-handler mappings and middleware
+// assignment.
+package main
+
+import (
+	"net/http"
+)
+
+// routes initializes the application's routes and middleware, and returns
+// a http.Handler ready to serve requests.
+func (app *application) routes() http.Handler {
+	mux := http.NewServeMux()
+
+	// Serve static files from the embedded assets.
+	mux.Handle("GET /static/", http.FileServerFS(app.assets))
+
+	// Application routes.
+	mux.HandleFunc("GET /{$}", app.home)
+
+	return mux
+}

@@ -1,0 +1,14 @@
+// The application's HTTP handlers: each handler reads a request, executes
+// business logic and writes a response.
+package main
+
+import (
+	"net/http"
+)
+
+// home displays the home page.
+func (app *application) home(w http.ResponseWriter, r *http.Request) {
+	data := app.defaultHTMLData(r)
+
+	app.render(w, r, http.StatusOK, "home.tmpl", data)
+}

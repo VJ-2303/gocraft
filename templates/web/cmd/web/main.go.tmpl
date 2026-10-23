@@ -1,0 +1,136 @@
+// The web application entrypoint: configuration, dependency initialization
+// and the HTTP server lifecycle.
+package main
+
+import (
+	"context"
+	"embed"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
+
+	"{{.ModulePath}}/assets"
+	"{{.ModulePath}}/internal/funcs"
+	"{{.ModulePath}}/internal/response"
+)
+
+func main() {
+	if err := run(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// run performs the startup and shutdown of the application. All errors are
+// returned and handled by main, keeping this function's control flow simple.
+func run() error {
+	// Parse the configuration settings for the application from the
+	// command-line flags.
+	var cfg config
+
+	flag.StringVar(&cfg.baseURL, "base-url", "http://localhost:{{.Port}}", "base URL for the application")
+	flag.IntVar(&cfg.httpPort, "http-port", {{.Port}}, "port to serve the application on")
+	flag.Parse()
+
+	// Initialize a logger writing to standard output.
+	logger := newLogger()
+
+	// Initialize the dependencies of the application.
+	templateRenderer, err := response.NewHTMLRenderer(assets.HTML, funcs.All(),
+		{{- range .WebPages}}
+		"{{.}}",
+		{{- end}}
+	)
+	if err != nil {
+		return fmt.Errorf("initializing template renderer: %w", err)
+	}
+
+	app := &application{
+		config:     cfg,
+		logger:     logger,
+		assets:     assets.FS,
+		templates:  templateRenderer,
+	}
+
+	// Initialize a new http.Server instance with sensible timeout settings.
+	srv := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.httpPort),
+		Handler:      app.routes(),
+		IdleTimeout:  time.Minute,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		ErrorLog:     slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
+
+	// Initialize a channel to receive any errors that occur during the
+	// graceful shutdown of the http.Server instance.
+	shutdownError := make(chan error)
+
+	// Initialize a goroutine that listens for interrupt or termination
+	// signals and gracefully shuts down the http.Server instance.
+	go func() {
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+		<-quit
+
+		logger.Info("shutting down server")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Call Shutdown() on the server with a context, which will do a
+		// graceful shutdown without interrupting any active connections.
+		shutdownError <- srv.Shutdown(ctx)
+	}()
+
+	logger.Info("starting server", "addr", srv.Addr)
+
+	// Call ListenAndServe() to start the server. If it returns
+	// http.ErrServerClosed then that means the server was shut down
+	// gracefully and we can proceed; any other error is a problem.
+	err = srv.ListenAndServe()
+	if !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+
+	// Wait for the graceful shutdown to complete, and return any error
+	// that occurred during it.
+	err = <-shutdownError
+	if err != nil {
+		return err
+	}
+
+	logger.Info("stopped server", "addr", srv.Addr)
+
+	return nil
+}
+
+// config holds the configuration settings for the application.
+type config struct {
+	baseURL  string
+	httpPort int
+}
+
+// application holds the dependencies of the application. Handlers, helpers
+// and middleware are defined as methods on this type.
+type application struct {
+	config    config
+	logger    *slog.Logger
+	assets    embed.FS
+	templates *response.HTMLRenderer
+	wg        sync.WaitGroup
+}
+
+// newLogger returns a slog.Logger writing plaintext records to standard
+// output.
+func newLogger() *slog.Logger {
+	handler := slog.NewTextHandler(os.Stdout, nil)
+	return slog.New(handler)
+}

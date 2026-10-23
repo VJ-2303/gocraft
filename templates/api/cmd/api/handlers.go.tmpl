@@ -1,0 +1,24 @@
+// The API's HTTP handlers: each handler reads a request, executes business
+// logic and writes a JSON response.
+package main
+
+import (
+	"net/http"
+
+	"{{.ModulePath}}/internal/response"
+	"{{.ModulePath}}/internal/version"
+)
+
+// healthcheck displays the application's health and version information.
+func (app *application) healthcheck(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{
+		"status":   "available",
+		"version":  version.Get(),
+		"revision": version.GetRevision(),
+	}
+
+	err := response.WriteJSON(w, http.StatusOK, data, nil)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}

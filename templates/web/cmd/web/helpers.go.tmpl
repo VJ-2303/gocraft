@@ -1,0 +1,59 @@
+// Miscellaneous helper functions for the application.
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"runtime/debug"
+	"time"
+
+	"{{.ModulePath}}/internal/version"
+)
+
+// serverError logs an error and sends a 500 Internal Server Error response
+// to the client.
+func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	method := r.Method
+	uri := r.URL.RequestURI()
+
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", string(debug.Stack()))
+
+	app.clientError(w, http.StatusInternalServerError)
+}
+
+// clientError sends a specific status code and corresponding message to
+// the client.
+func (app *application) clientError(w http.ResponseWriter, status int) {
+	http.Error(w, http.StatusText(status), status)
+}
+
+// defaultHTMLData returns a map with common data shared by all HTML
+// templates. Additional template-specific data can be added to the map by
+// handlers.
+func (app *application) defaultHTMLData(r *http.Request) templateData {
+	return templateData{
+		"BaseURL":  app.config.baseURL,
+		"Year":     time.Now().Year(),
+		"Version":  version.Get(),
+		"Revision": version.GetRevision(),
+	}
+}
+
+// backgroundTask runs fn in a background goroutine, automatically
+// recovering from any panics and reporting any returned errors. The
+// application waits for outstanding background tasks to complete before
+// shutting down.
+func (app *application) backgroundTask(fn func() error) {
+	app.wg.Go(func() {
+		defer func() {
+			if err := recover(); err != nil {
+				app.logger.Error(fmt.Sprintf("%v", err), "panic", true)
+			}
+		}()
+
+		err := fn()
+		if err != nil {
+			app.logger.Error("background task failed", "error", err)
+		}
+	})
+}

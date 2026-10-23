@@ -1,0 +1,42 @@
+// Package version provides functions for retrieving the version and VCS
+// revision of the application at runtime.
+package version
+
+import (
+	"runtime/debug"
+	"strings"
+)
+
+var (
+	version  = "dev"
+	revision = "unknown"
+)
+
+func init() {
+	// If the application was built from source control, the build
+	// information will include the module version and the VCS metadata.
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
+
+	if v := info.Main.Version; v != "" && v != "(devel)" {
+		version = strings.TrimPrefix(v, "v")
+	}
+
+	for _, setting := range info.Settings {
+		if setting.Key == "vcs.revision" && setting.Value != "" {
+			revision = setting.Value
+		}
+	}
+}
+
+// Get returns the version of the application.
+func Get() string {
+	return version
+}
+
+// GetRevision returns the VCS revision (commit hash) of the application.
+func GetRevision() string {
+	return revision
+}

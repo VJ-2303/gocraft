@@ -15,5 +15,5 @@ import "embed"
 // FS holds every template file. Templates are rendered by the generator
 // package with a spec.ResolvedSpec as their data.
 //
-//go:embed common
+//go:embed common shared web api
 var FS embed.FS

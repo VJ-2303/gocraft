@@ -59,16 +59,25 @@ func Generate(rsp spec.ResolvedSpec, targetDir string, logger *slog.Logger) (Res
 		}
 		out = filepath.FromSlash(out)
 
-		content, err := renderTemplate(f.Template, readFile(f.Template), rsp)
-		if err != nil {
-			return result, fmt.Errorf("rendering %s: %w", f.Template, err)
+		var content []byte
+		if f.Copy {
+			content, err = templates.FS.ReadFile(f.Template)
+			if err != nil {
+				return result, fmt.Errorf("copying %s: %w", f.Template, err)
+			}
+		} else {
+			rendered, err := renderTemplate(f.Template, readFile(f.Template), rsp)
+			if err != nil {
+				return result, fmt.Errorf("rendering %s: %w", f.Template, err)
+			}
+			content = []byte(rendered)
 		}
 
 		dest := filepath.Join(targetDir, out)
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return result, fmt.Errorf("creating directory for %s: %w", out, err)
 		}
-		if err := os.WriteFile(dest, []byte(content), 0o644); err != nil {
+		if err := os.WriteFile(dest, content, 0o644); err != nil {
 			return result, fmt.Errorf("writing %s: %w", out, err)
 		}
 

@@ -1,0 +1,39 @@
+// Package response contains helpers for writing HTTP responses.
+package response
+
+import (
+	"encoding/json/v2"
+	"net/http"
+)
+
+// BadRequestError is an error type for problems with the client's request.
+// It is returned by the request decoding helpers when the request body or
+// query string is malformed.
+type BadRequestError struct {
+	Message string
+}
+
+func (e *BadRequestError) Error() string {
+	return e.Message
+}
+
+// WriteJSON writes a JSON response with the given status code, data and
+// optional header values.
+func WriteJSON(w http.ResponseWriter, status int, data any, headers http.Header) error {
+	js, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	for key, values := range headers {
+		for _, value := range values {
+			w.Header().Add(key, value)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	w.Write(js)
+
+	return nil
+}

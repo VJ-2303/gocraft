@@ -104,6 +104,10 @@ type ResolvedSpec struct {
 	// go.mod.
 	GoVersion string
 
+	// WebPages lists the HTML page templates to parse at startup, for web
+	// applications only.
+	WebPages []string
+
 	// NeedsMailer reports whether SMTP sending is required, either because
 	// the emails feature is selected or because a feature like error
 	// notifications or user accounts sends mail.
@@ -203,6 +207,19 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 	r.MigrateTags = migrateTags[r.Dialect]
 	r.GoVersion = GoVersion
 	r.Requires = s.requires(&r)
+
+	if s.AppType == AppWeb {
+		r.WebPages = []string{"home.tmpl"}
+		if s.CustomErrorPages {
+			r.WebPages = append(r.WebPages, "error.tmpl")
+		}
+		if s.AccountsFull {
+			r.WebPages = append(r.WebPages,
+				"signup.tmpl", "login.tmpl", "restricted.tmpl",
+				"forgotten-password.tmpl", "forgotten-password-confirmation.tmpl",
+				"password-reset.tmpl", "password-reset-confirmation.tmpl")
+		}
+	}
 
 	return r, nil
 }
