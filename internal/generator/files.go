@@ -33,6 +33,13 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/version/version.go.tmpl", OutPath: "internal/version/version.go", Cond: true},
 		{Template: "shared/internal/funcs/funcs.go.tmpl", OutPath: "internal/funcs/funcs.go", Cond: true},
 		{Template: "shared/internal/response/json.go.tmpl", OutPath: "internal/response/json.go", Cond: true},
+		{Template: "shared/internal/database/database.go.tmpl", OutPath: "internal/database/database.go", Cond: rsp.NeedsDB},
+
+		// The assets package embeds migrations (both app types) and the
+		// static files and HTML templates (web apps only).
+		{Template: "shared/assets/efs.go.tmpl", OutPath: "assets/efs.go", Cond: rsp.AppType == spec.AppWeb || rsp.Migrations},
+		{Template: "shared/assets/migrations/000001_init.up.sql", OutPath: "assets/migrations/000001_init.up.sql", Cond: rsp.Migrations, Copy: true},
+		{Template: "shared/assets/migrations/000001_init.down.sql", OutPath: "assets/migrations/000001_init.down.sql", Cond: rsp.Migrations, Copy: true},
 	}
 
 	files = append(files, appFiles(rsp)...)
@@ -59,7 +66,6 @@ func webFiles(rsp spec.ResolvedSpec) []FileSpec {
 	return []FileSpec{
 		{Template: "shared/internal/response/html.go.tmpl", OutPath: "internal/response/html.go", Cond: true},
 
-		{Template: "web/assets/efs.go.tmpl", OutPath: "assets/efs.go", Cond: true},
 		{Template: "web/assets/static/css/main.css", OutPath: "assets/static/css/main.css", Cond: true, Copy: true},
 		{Template: "web/assets/html/base.tmpl", OutPath: "assets/html/base.tmpl", Cond: true, Copy: true},
 		{Template: "web/assets/html/components/nav.tmpl", OutPath: "assets/html/components/nav.tmpl", Cond: true, Copy: true},

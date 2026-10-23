@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/vj/nomoreboiler/internal/spec"
 	"github.com/vj/nomoreboiler/templates"
@@ -23,10 +25,18 @@ type Result struct {
 	Files []string
 }
 
+// Options controls post-generation processing.
+type Options struct {
+	// Tidy runs go mod tidy inside the generated codebase so that it
+	// builds immediately. This requires a Go toolchain and network access
+	// for the selected dependencies.
+	Tidy bool
+}
+
 // Generate writes a codebase for the resolved spec into targetDir. The
 // directory must not exist, or must exist and be empty. Files are written
 // with 0644 permissions and directories with 0755.
-func Generate(rsp spec.ResolvedSpec, targetDir string, logger *slog.Logger) (Result, error) {
+func Generate(rsp spec.ResolvedSpec, targetDir string, logger *slog.Logger, opts Options) (Result, error) {
 	if err := rsp.Validate(); err != nil {
 		return Result{}, fmt.Errorf("invalid codebase spec: %w", err)
 	}
@@ -85,7 +95,36 @@ func Generate(rsp spec.ResolvedSpec, targetDir string, logger *slog.Logger) (Res
 		logger.Debug("generated file", "path", out)
 	}
 
+	if opts.Tidy && len(rsp.Requires) > 0 {
+		logger.Info("running go mod tidy in the generated codebase")
+		if err := tidy(targetDir); err != nil {
+			return result, fmt.Errorf("tidying module: %w", err)
+		}
+	}
+
 	return result, nil
+}
+
+// tidy runs go mod tidy inside dir, so that a generated codebase with
+// external dependencies builds immediately after generation.
+func tidy(dir string) error {
+	cmd := exec.Command("go", "mod", "tidy")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GOFLAGS=-mod=mod")
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Run() }()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			return fmt.Errorf("%w (output: %s)", err, cmd.Stderr)
+		}
+		return nil
+	case <-time.After(10 * time.Minute):
+		_ = cmd.Process.Kill()
+		return fmt.Errorf("go mod tidy timed out after 10m")
+	}
 }
 
 // checkTarget reports an error if the target directory exists and contains

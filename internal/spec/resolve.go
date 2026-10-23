@@ -38,7 +38,7 @@ var drivers = map[Database]DriverInfo{
 		Name:       "pgx",
 		ModPath:    "github.com/jackc/pgx/v5",
 		ImportPath: "github.com/jackc/pgx/v5/stdlib",
-		ExampleDSN: "user:pass@localhost:5432/example?sslmode=disable",
+		ExampleDSN: "user:pass@localhost:5432/example?sslmode=disable&default_query_exec_mode=simple_protocol",
 	},
 	DBMySQL: {
 		Name:       "mysql",

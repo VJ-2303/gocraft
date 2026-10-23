@@ -1,0 +1,110 @@
+// Package database provides the application's database connection pool
+// and migration helpers.
+package database
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"io/fs"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// Config holds the settings for the database connection pool.
+type Config struct {
+	DSN         string
+	MaxOpenConns int
+	MaxIdleConns int
+	MaxIdleTime  time.Duration
+}
+
+// New opens a connection pool to the database, verifies the connection
+// with a ping, and applies the pool settings.
+func New(ctx context.Context, cfg Config) (*sqlx.DB, error) {
+	db, err := sqlx.ConnectContext(ctx, "{{.Driver.Name}}", cfg.DSN)
+	if err != nil {
+		return nil, err
+	}
+
+	db.SetMaxOpenConns(cfg.MaxOpenConns)
+	db.SetMaxIdleConns(cfg.MaxIdleConns)
+	db.SetConnMaxIdleTime(cfg.MaxIdleTime)
+
+	return db, nil
+}
+
+// MigrateUp applies all pending up migrations from the provided file
+// system, in version order. Progress is tracked in the schema_migrations
+// table using the same format as the golang-migrate CLI, so migrations
+// applied here and migrations applied via the Makefile targets stay in
+// sync.
+func MigrateUp(db *sqlx.DB, migrationsFS fs.FS) error {
+	entries, err := fs.ReadDir(migrationsFS, ".")
+	if err != nil {
+		return fmt.Errorf("reading migrations: %w", err)
+	}
+
+	// Collect the versions of all pending up migrations.
+	type migration struct {
+		version  int64
+		filename string
+	}
+
+	var pending []migration
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".up.sql") {
+			continue
+		}
+
+		prefix, _, _ := strings.Cut(name, "_")
+		version, err := strconv.ParseInt(prefix, 10, 64)
+		if err != nil {
+			return fmt.Errorf("migration %s does not start with a numeric version", name)
+		}
+
+		pending = append(pending, migration{version: version, filename: name})
+	}
+	slices.SortFunc(pending, func(a, b migration) int {
+		return cmp.Compare(a.version, b.version)
+	})
+
+	// Read the current migration version, if any. On a fresh database the
+	// schema_migrations table does not exist yet, so create it.
+	var current int64
+	err = db.Get(&current, "SELECT max(version) FROM schema_migrations")
+	if err != nil {
+		_, err = db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (version bigint not null primary key, dirty boolean not null)")
+		if err != nil {
+			return fmt.Errorf("creating schema_migrations table: %w", err)
+		}
+	}
+
+	for _, m := range pending {
+		if m.version <= current {
+			continue
+		}
+
+		content, err := fs.ReadFile(migrationsFS, m.filename)
+		if err != nil {
+			return fmt.Errorf("reading migration %s: %w", m.filename, err)
+		}
+
+		_, err = db.Exec(string(content))
+		if err != nil {
+			return fmt.Errorf("applying migration %s: %w", m.filename, err)
+		}
+
+		_, err = db.Exec("INSERT INTO schema_migrations (version, dirty) VALUES ({{if eq .Dialect "mysql"}}?, false{{else}}$1, false{{end}})", m.version)
+		if err != nil {
+			return fmt.Errorf("recording migration %s: %w", m.filename, err)
+		}
+	}
+
+	return nil
+}
