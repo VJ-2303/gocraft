@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -17,15 +18,44 @@ func (app *application) routes() http.Handler {
 	mux.Handler(http.MethodGet, "/static/*filepath", http.FileServerFS(app.assets))
 
 	// Application routes.
+	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+		app.home(w, r)
+	})
 
 	// Any other path is not found.
 	mux.NotFound = http.HandlerFunc(app.notFound)
-	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+{{if .AccountsFull}}
+
+	// User account routes, adapted to httprouter's handler signature.
+	handler := func(next http.HandlerFunc) httprouter.Handle {
+		return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+			ctx := context.WithValue(r.Context(), paramsContextKey, ps)
+			next(w, r.WithContext(ctx))
+		}
+	}
+
+	mux.GET("/restricted", handler(app.requireAuthentication(app.restricted)))
+	mux.GET("/signup", handler(app.requireAnonymous(app.signup)))
+	mux.POST("/signup", handler(app.requireAnonymous(app.signupSubmit)))
+	mux.GET("/login", handler(app.requireAnonymous(app.login)))
+	mux.POST("/login", handler(app.requireAnonymous(app.loginSubmit)))
+	mux.POST("/logout", handler(app.requireAuthentication(app.logout)))
+	mux.GET("/forgotten-password", handler(app.requireAnonymous(app.forgottenPassword)))
+	mux.POST("/forgotten-password", handler(app.requireAnonymous(app.forgottenPasswordSubmit)))
+	mux.GET("/forgotten-password-confirmation", handler(app.requireAnonymous(app.forgottenPasswordConfirmation)))
+	mux.GET("/password-reset/:token", handler(app.requireAnonymous(app.passwordReset)))
+	mux.POST("/password-reset/:token", handler(app.requireAnonymous(app.passwordResetSubmit)))
+	mux.GET("/password-reset-confirmation", handler(app.requireAnonymous(app.passwordResetConfirmation)))
+{{end}}	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.home(w, r)
 	})
 
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
+{{- if .AccountsFull}}
+	handler = app.authenticate(handler)
+	handler = app.preventCSRF(handler)
+{{- end}}
 {{- if .Sessions}}
 	handler = app.sessionManager.LoadAndSave(handler)
 {{- end}}
@@ -39,3 +69,18 @@ func (app *application) routes() http.Handler {
 
 	return handler
 }
+
+{{- if .AccountsFull}}
+
+// pathParam extracts a named path parameter from the request.
+// httprouter passes params out-of-band, so the adapter stores them in
+// the request context first.
+func pathParam(r *http.Request, name string) string {
+	params, _ := r.Context().Value(paramsContextKey).(httprouter.Params)
+	return params.ByName(name)
+}
+
+type contextKeyType struct{}
+
+var paramsContextKey = contextKeyType{}
+{{- end}}

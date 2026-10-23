@@ -1,0 +1,4 @@
+{{- if eq .Dialect "postgres"}}
+DROP INDEX IF EXISTS users_email_unique_idx;
+{{- end}}
+DROP TABLE IF EXISTS users;

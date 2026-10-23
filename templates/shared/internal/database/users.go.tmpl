@@ -1,0 +1,81 @@
+package database
+
+import (
+	"time"
+
+	"github.com/jmoiron/sqlx"
+)
+
+// User represents a user account stored in the users table.
+type User struct {
+	ID             int64     `db:"id"`
+	Created        time.Time `db:"created"`
+	Email          string    `db:"email"`
+	HashedPassword []byte    `db:"hashed_password"`
+}
+
+// UserModel wraps a sqlx.DB and provides methods for working with users.
+type UserModel struct {
+	DB *sqlx.DB
+}
+
+// Insert creates a new user with the given email and hashed password,
+// returning the new user's ID.
+func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
+	query := m.DB.Rebind("INSERT INTO users (created, email, hashed_password) VALUES (?, ?, ?)")
+
+	result, err := m.DB.Exec(query, time.Now().UTC(), email, hashedPassword)
+	if err != nil {
+		return 0, err
+	}
+
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+// Get fetches a single user by ID. The second return value reports
+// whether a matching user was found.
+func (m UserModel) Get(id int64) (*User, bool, error) {
+	query := m.DB.Rebind("SELECT id, created, email, hashed_password FROM users WHERE id = ?")
+
+	var user User
+	err := m.DB.Get(&user, query, id)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &user, true, nil
+}
+
+// GetByEmail fetches a single user with a case-insensitive email match.
+// The second return value reports whether a matching user was found.
+func (m UserModel) GetByEmail(email string) (*User, bool, error) {
+	query := m.DB.Rebind("SELECT id, created, email, hashed_password FROM users WHERE LOWER(email) = LOWER(?)")
+
+	var user User
+	err := m.DB.Get(&user, query, email)
+	if err != nil {
+		if isNoRows(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+
+	return &user, true, nil
+}
+
+// UpdateHashedPassword replaces the stored password hash of the user
+// with the given ID.
+func (m UserModel) UpdateHashedPassword(id int64, hashedPassword []byte) error {
+	query := m.DB.Rebind("UPDATE users SET hashed_password = ? WHERE id = ?")
+
+	_, err := m.DB.Exec(query, hashedPassword, id)
+	return err
+}

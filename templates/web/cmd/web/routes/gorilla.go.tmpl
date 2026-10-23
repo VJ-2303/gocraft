@@ -21,9 +21,28 @@ func (app *application) routes() http.Handler {
 
 	// Any other path is not found.
 	mux.NotFoundHandler = http.HandlerFunc(app.notFound)
+{{if .AccountsFull}}
 
+	// User account routes.
+	mux.HandleFunc("/restricted", app.requireAuthentication(app.restricted)).Methods(http.MethodGet)
+	mux.HandleFunc("/signup", app.requireAnonymous(app.signup)).Methods(http.MethodGet)
+	mux.HandleFunc("/signup", app.requireAnonymous(app.signupSubmit)).Methods(http.MethodPost)
+	mux.HandleFunc("/login", app.requireAnonymous(app.login)).Methods(http.MethodGet)
+	mux.HandleFunc("/login", app.requireAnonymous(app.loginSubmit)).Methods(http.MethodPost)
+	mux.HandleFunc("/logout", app.requireAuthentication(app.logout)).Methods(http.MethodPost)
+	mux.HandleFunc("/forgotten-password", app.requireAnonymous(app.forgottenPassword)).Methods(http.MethodGet)
+	mux.HandleFunc("/forgotten-password", app.requireAnonymous(app.forgottenPasswordSubmit)).Methods(http.MethodPost)
+	mux.HandleFunc("/forgotten-password-confirmation", app.requireAnonymous(app.forgottenPasswordConfirmation)).Methods(http.MethodGet)
+	mux.HandleFunc("/password-reset/{token}", app.requireAnonymous(app.passwordReset)).Methods(http.MethodGet)
+	mux.HandleFunc("/password-reset/{token}", app.requireAnonymous(app.passwordResetSubmit)).Methods(http.MethodPost)
+	mux.HandleFunc("/password-reset-confirmation", app.requireAnonymous(app.passwordResetConfirmation)).Methods(http.MethodGet)
+{{end}}
 	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
+{{- if .AccountsFull}}
+	handler = app.authenticate(handler)
+	handler = app.preventCSRF(handler)
+{{- end}}
 {{- if .Sessions}}
 	handler = app.sessionManager.LoadAndSave(handler)
 {{- end}}
@@ -37,3 +56,11 @@ func (app *application) routes() http.Handler {
 
 	return handler
 }
+
+{{- if .AccountsFull}}
+
+// pathParam extracts a named path parameter from the request.
+func pathParam(r *http.Request, name string) string {
+	return mux.Vars(r)[name]
+}
+{{- end}}

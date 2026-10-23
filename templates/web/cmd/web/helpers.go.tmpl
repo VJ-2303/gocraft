@@ -6,6 +6,9 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+{{- if .AccountsFull}}
+	"github.com/justinas/nosurf"
+{{- end}}
 
 	"{{.ModulePath}}/internal/version"
 )
@@ -76,7 +79,7 @@ func (app *application) defaultEmailData() templateData {
 // templates. Additional template-specific data can be added to the map by
 // handlers.
 func (app *application) defaultHTMLData(r *http.Request) templateData {
-	return templateData{
+	data := templateData{
 		"BaseURL":  app.config.baseURL,
 		"Year":     time.Now().Year(),
 		"Version":  version.Get(),
@@ -84,6 +87,18 @@ func (app *application) defaultHTMLData(r *http.Request) templateData {
 
 		"ErrorNotifications": {{if .ErrorNotifications}}true{{else}}false{{end}},
 	}
+{{- if .AccountsFull}}
+
+	// Every form template can render the CSRF token, and every template
+	// can branch on the authenticated user.
+	data["CSRFToken"] = nosurf.Token(r)
+
+	if user, ok := contextGetAuthenticatedUser(r); ok {
+		data["AuthenticatedUser"] = user
+	}
+{{- end}}
+
+	return data
 }
 
 // backgroundTask runs fn in a background goroutine, automatically

@@ -1,0 +1,123 @@
+// Package validator contains a small validation helper for form and JSON
+// payload data, in the style popularized by the Let's Go books.
+package validator
+
+import (
+	"fmt"
+	"net/mail"
+	"regexp"
+	"strings"
+	"unicode/utf8"
+)
+
+// Validator holds the validation errors for a form or payload, keyed by
+// field name.
+type Validator struct {
+	// FieldErrors holds the error messages for each failing field.
+	FieldErrors map[string]string
+}
+
+// Valid returns true when the FieldErrors map is empty.
+func (v *Validator) Valid() bool {
+	return len(v.FieldErrors) == 0
+}
+
+// AddFieldError adds an error message for the field with the given key,
+// as long as no error already exists for it.
+func (v *Validator) AddFieldError(key, message string) {
+	if v.FieldErrors == nil {
+		v.FieldErrors = make(map[string]string)
+	}
+	if _, exists := v.FieldErrors[key]; !exists {
+		v.FieldErrors[key] = message
+	}
+}
+
+// CheckField adds an error message for the field with the given key only
+// when the check is not ok.
+func (v *Validator) CheckField(ok bool, key, message string) {
+	if !ok {
+		v.AddFieldError(key, message)
+	}
+}
+
+// NotBlank returns true when the value contains at least one non-space
+// character.
+func NotBlank(value string) bool {
+	return strings.TrimSpace(value) != ""
+}
+
+// MaxChars returns true when the value contains no more than n characters.
+func MaxChars(value string, n int) bool {
+	return utf8.RuneCountInString(value) <= n
+}
+
+// MinChars returns true when the value contains at least n characters.
+func MinChars(value string, n int) bool {
+	return utf8.RuneCountInString(value) >= n
+}
+
+// PermittedChars returns true when the value contains only characters
+// from the permitted set.
+func PermittedChars(value string, permitted ...rune) bool {
+	for _, r := range value {
+		if !containsRune(permitted, r) {
+			return false
+		}
+	}
+	return true
+}
+
+// Matches returns true when the value matches the given regexp.
+func Matches(value string, rx *regexp.Regexp) bool {
+	return rx.MatchString(value)
+}
+
+// IsEmail returns true when the value parses as an email address.
+func IsEmail(value string) bool {
+	_, err := mail.ParseAddress(strings.TrimSpace(value))
+	return err == nil
+}
+
+// In returns true when the value is one of the permitted values.
+func In[T comparable](value T, permitted ...T) bool {
+	for i := range permitted {
+		if value == permitted[i] {
+			return true
+		}
+	}
+	return false
+}
+
+// All runs every check and returns the first false result, for use in
+// compound validations.
+func All(checks ...bool) bool {
+	for _, check := range checks {
+		if !check {
+			return false
+		}
+	}
+	return true
+}
+
+// Error renders the field errors as a single error string.
+func (v *Validator) Error() string {
+	if v.Valid() {
+		return ""
+	}
+	var sb strings.Builder
+	for key, message := range v.FieldErrors {
+		fmt.Fprintf(&sb, "%s: %s; ", key, message)
+	}
+	return sb.String()
+}
+
+// containsRune reports whether runes contains r.
+func containsRune(runes []rune, r rune) bool {
+	for _, permitted := range runes {
+		if permitted == r {
+			return true
+		}
+	}
+	return false
+}

@@ -5,6 +5,8 @@ package database
 import (
 	"cmp"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"io/fs"
 	"slices"
@@ -14,6 +16,12 @@ import (
 
 	"github.com/jmoiron/sqlx"
 )
+
+// isNoRows reports whether the error is sql.ErrNoRows, used by the model
+// helpers to translate "no match" into a found=false return value.
+func isNoRows(err error) bool {
+	return errors.Is(err, sql.ErrNoRows)
+}
 
 // Config holds the settings for the database connection pool.
 type Config struct {

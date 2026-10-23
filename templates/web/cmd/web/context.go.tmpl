@@ -1,0 +1,29 @@
+// Request context helpers for storing and retrieving the authenticated
+// user.
+package main
+
+import (
+	"context"
+	"net/http"
+
+	"{{.ModulePath}}/internal/database"
+)
+
+type contextKey string
+
+const authenticatedUserContextKey = contextKey("authenticatedUser")
+
+// contextSetAuthenticatedUser returns a new request carrying the
+// authenticated user in its context.
+func contextSetAuthenticatedUser(r *http.Request, user *database.User) *http.Request {
+	ctx := context.WithValue(r.Context(), authenticatedUserContextKey, user)
+	return r.WithContext(ctx)
+}
+
+// contextGetAuthenticatedUser retrieves the authenticated user from the
+// request context. The second return value reports whether a user was
+// set.
+func contextGetAuthenticatedUser(r *http.Request) (*database.User, bool) {
+	user, ok := r.Context().Value(authenticatedUserContextKey).(*database.User)
+	return user, ok
+}

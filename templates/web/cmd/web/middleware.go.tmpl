@@ -10,6 +10,9 @@ import (
 {{- if .RequestLogging}}
 	"time"
 {{- end}}
+{{- if .AccountsFull}}
+	"github.com/justinas/nosurf"
+{{- end}}
 )
 
 {{- if .RequestLogging}}
@@ -109,3 +112,85 @@ func (app *application) secureHeaders(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+{{- if .AccountsFull}}
+
+// authenticate reads the authenticated user ID from the session, looks
+// up the corresponding user, and stores it in the request context for
+// downstream handlers and templates.
+func (app *application) authenticate(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := app.sessionManager.GetInt(r.Context(), "authenticatedUserID")
+		if id <= 0 {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		user, found, err := app.users.Get(int64(id))
+		if err != nil {
+			app.serverError(w, r, err)
+			return
+		}
+		if !found {
+			// The session refers to a user that no longer exists.
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		next.ServeHTTP(w, contextSetAuthenticatedUser(r, user))
+	})
+}
+
+// requireAuthentication redirects anonymous users to the login page,
+// remembering the requested path so the login handler can send them back
+// after signing in.
+func (app *application) requireAuthentication(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, authenticated := contextGetAuthenticatedUser(r); !authenticated {
+			app.sessionManager.Put(r.Context(), "redirectPathAfterLogin", r.URL.RequestURI())
+			http.Redirect(w, r, "/login", http.StatusSeeOther)
+			return
+		}
+
+		w.Header().Add("Cache-Control", "no-store")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// requireAnonymous redirects authenticated users away from pages meant
+// only for signed-out users, like signup and login.
+func (app *application) requireAnonymous(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, authenticated := contextGetAuthenticatedUser(r); authenticated {
+			http.Redirect(w, r, "/restricted", http.StatusSeeOther)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// preventCSRF rejects any non-safe request that does not carry a valid
+// CSRF token, using the justinas/nosurf package. Forms must include the
+// hidden input rendered by the CSRFToken template value.
+func (app *application) preventCSRF(next http.Handler) http.Handler {
+	csrfHandler := nosurf.New(next)
+	csrfHandler.SetBaseCookie(http.Cookie{
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   app.sessionManager.Cookie.Secure,
+	})
+	csrfHandler.SetIsTLSFunc(func(r *http.Request) bool {
+		// Determine the request scheme from the connection, so origin
+		// checks pass for both local HTTP development and production
+		// HTTPS deployments behind the automatic HTTPS configuration.
+		return r.TLS != nil
+	})
+	csrfHandler.SetFailureHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		app.clientError(w, r, http.StatusBadRequest)
+	}))
+
+	return csrfHandler
+}
+{{- end}}
