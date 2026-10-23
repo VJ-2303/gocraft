@@ -1,0 +1,57 @@
+// Miscellaneous helper functions for the API.
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"runtime/debug"
+
+	"{{.ModulePath}}/internal/response"
+)
+
+// envelope is the type used to wrap JSON response payloads.
+type envelope map[string]any
+
+// serverError logs an error and sends a 500 Internal Server Error response
+// to the client.
+func (app *application) serverError(w http.ResponseWriter, r *http.Request, err error) {
+	method := r.Method
+	uri := r.URL.RequestURI()
+
+	app.logger.Error(err.Error(), "method", method, "uri", uri, "trace", string(debug.Stack()))
+
+	message := "the server encountered a problem and could not process your request"
+	err = response.WriteJSON(w, http.StatusInternalServerError, envelope{"error": message}, nil)
+	if err != nil {
+		app.logger.Error(err.Error(), "method", method, "uri", uri)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+// clientError sends a specific status code and JSON error message to the
+// client.
+func (app *application) clientError(w http.ResponseWriter, status int) {
+	message := http.StatusText(status)
+	err := response.WriteJSON(w, status, envelope{"error": message}, nil)
+	if err != nil {
+		w.WriteHeader(status)
+	}
+}
+
+// backgroundTask runs fn in a background goroutine, automatically
+// recovering from any panics and reporting any returned errors. The API
+// waits for outstanding background tasks to complete before shutting down.
+func (app *application) backgroundTask(fn func() error) {
+	app.wg.Go(func() {
+		defer func() {
+			if err := recover(); err != nil {
+				app.logger.Error(fmt.Sprintf("%v", err), "panic", true)
+			}
+		}()
+
+		err := fn()
+		if err != nil {
+			app.logger.Error("background task failed", "error", err)
+		}
+	})
+}

@@ -1,0 +1,66 @@
+// Package funcs contains custom template functions that are automatically
+// available in all HTML and email templates.
+package funcs
+
+import (
+	"net/url"
+	"strings"
+	"time"
+)
+
+// All returns the template functions as a map, suitable for use with
+// template.FuncMap.
+func All() map[string]any {
+	return map[string]any{
+		"humanDate":   humanDate,
+		"year":        year,
+		"urlSetParam": urlSetParam,
+		"urlDelParam": urlDelParam,
+	}
+}
+
+// humanDate returns a human-readable rendering of a time value, e.g.
+// "02 Jan 2006 at 15:04".
+func humanDate(t time.Time) string {
+	return t.UTC().Format("02 Jan 2006 at 15:04")
+}
+
+// year returns the current year as an integer.
+func year() int {
+	return time.Now().Year()
+}
+
+// urlSetParam returns a copy of u with the given query parameter set to
+// value, adding the parameter if it doesn't already exist.
+func urlSetParam(u string, key, value string) string {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+
+	query := parsed.Query()
+	query.Set(key, value)
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
+}
+
+// urlDelParam returns a copy of u with the given query parameter removed.
+func urlDelParam(u string, key string) string {
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return u
+	}
+
+	query := parsed.Query()
+	query.Del(key)
+	parsed.RawQuery = query.Encode()
+
+	return parsed.String()
+}
+
+// trimSuffix is a convenience wrapper for strings.TrimSuffix, useful in
+// templates for trimming trailing newlines or whitespace markers.
+func trimSuffix(s, suffix string) string {
+	return strings.TrimSuffix(s, suffix)
+}

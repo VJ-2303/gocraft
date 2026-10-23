@@ -53,4 +53,14 @@ run/live:
 	fi
 	air
 
-.PHONY: help audit test test/cover upgradeable tidy build run run/live
+## gate: Generate example codebases to /tmp/nmb-gate and build and vet each one.
+gate:
+	@rm -rf /tmp/nmb-gate
+	@NMB_GATE_DIR=/tmp/nmb-gate go test -count=1 -run TestGateGenerate ./internal/generator/
+	@set -e; for dir in /tmp/nmb-gate/*/; do \
+		echo "== verifying $$(basename $$dir) =="; \
+		(cd $$dir && go build ./... && go vet ./...); \
+	done; \
+	echo "gate: all generated codebases build and vet cleanly"
+
+.PHONY: help audit test test/cover upgradeable tidy build run run/live gate

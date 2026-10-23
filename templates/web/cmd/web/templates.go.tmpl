@@ -1,0 +1,19 @@
+// The application's HTML template rendering.
+package main
+
+import (
+	"net/http"
+)
+
+// templateData is the data passed to HTML templates. It is a map so that
+// template authors can add arbitrary keys alongside the defaults.
+type templateData map[string]any
+
+// render writes an HTML response by executing the named page template with
+// the given status code and data.
+func (app *application) render(w http.ResponseWriter, r *http.Request, status int, page string, data templateData) {
+	err := app.templates.Render(w, status, page, data)
+	if err != nil {
+		app.serverError(w, r, err)
+	}
+}
