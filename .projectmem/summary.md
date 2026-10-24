@@ -20,7 +20,6 @@ A terminal UI for generating production-ready Go web application and JSON API co
 - No decisions logged yet.
 
 ## Notes
-- merge: milestone 13 — generated test suites
 - feat: full permutation matrix, hardened feature interactions
 - merge: milestone 14 — permutation matrix and polish
 - style: rewrite HTML and email templates in clean Let's Go fashion
@@ -30,6 +29,7 @@ A terminal UI for generating production-ready Go web application and JSON API co
 - docs: detailed README and compact AGENTS.md reference for agents
 - style: compact wizard — one-line question header, no brand chrome
 - style: gofmt test files
+- gotcha: GoReleaser v2 deprecates singular format in favor of formats list; PowerShell 5.1 requires explicit TLS 1.2 SecurityProtocol to query GitHub API
 
 ## Key files
 - `resolve.go`
