@@ -27,12 +27,15 @@ non-empty targets.
 | `internal/cli/cli.go` | Headless CLI runner: flag parsing, `--dry-run`, `--json`, validation |
 | `internal/spec/spec.go` | `ProjectSpec` — choice representation and constants |
 | `internal/spec/validate.go` | Option legality + dependency rules (source of truth) |
-| `internal/spec/resolve.go` | `ResolvedSpec` view-model, `ApplyDependencies()`, drivers, `requireVersions` pins, `BasicAuthHashedPassword` |
+| `internal/spec/resolve.go` | `ResolvedSpec` view-model, `ApplyDependencies()`, `String()` |
+| `internal/spec/drivers.go` | `GoVersion`, `DriverInfo`, `drivers`, `migrateTags`, `BasicAuthHashedPassword` |
+| `internal/spec/requires.go` | `requireVersions` pins + `requires()` (go.mod deps) |
 | `internal/generator/generator.go` | Render + write loop; gofmt via `go/format`; `go mod tidy` |
 | `internal/generator/files.go` | **The file matrix** — every emitted file, with `Cond` and `Copy` |
 | `internal/ui/ui.go` | Interactive TUI entrypoint (`ui.Run`) |
 | `internal/ui/questions.go` | Question definitions, options, validators, and visibility rules |
-| `internal/ui/model.go` | Bubble Tea state machine, navigation, cascade resolution, rendering |
+| `internal/ui/model.go` | Bubble Tea state machine, navigation, cascade resolution |
+| `internal/ui/view.go` | Rendering: `View`, panes, tables, done/failed states |
 | `internal/ui/values.go` | `wizardValues` state store and `toSpec()` conversion |
 | `internal/ui/theme.go` | Lipgloss styles, color palette, and layout helpers |
 | `scripts/` | Cross-platform installation scripts (`install.sh`, `install.ps1`) |
@@ -63,7 +66,7 @@ non-empty targets.
   `go list` format string) must be escaped as
   `{{"{{if ...}}{{end}}"}}`.
 - New third-party deps for generated code: pin the version in
-  `requireVersions` (internal/spec/resolve.go) AND add the `add(...)`
+  `requireVersions` (internal/spec/requires.go) AND add the `add(...)`
   call in `requires()`. `go mod tidy` in generated projects resolves
   store sub-packages (e.g. `github.com/alexedwards/scs/sqlite3store`,
   no `/v2`, pseudo-versions) automatically.

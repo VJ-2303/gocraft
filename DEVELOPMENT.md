@@ -31,7 +31,9 @@ cmd/gocraft/main.go
 - **`internal/spec/`**: Core domain logic and single source of truth:
   - `spec.go`: `ProjectSpec` definition capturing user choices.
   - `validate.go`: Invariant and dependency validation rules.
-  - `resolve.go`: Derives `ResolvedSpec` view-model, third-party dependency versions, and connection strings.
+  - `resolve.go`: Derives `ResolvedSpec` view-model and connection strings.
+  - `drivers.go`: Database driver registry, migration tags, `GoVersion`, and `BasicAuthHashedPassword`.
+  - `requires.go`: Pinned dependency versions (`requireVersions`) and `requires()` go.mod assembly.
 - **`internal/generator/`**: Code generation engine:
   - `files.go`: The file matrix mapping every template to output path with evaluation conditions (`Cond`) and verbatim copy flags (`Copy`).
   - `generator.go`: Template renderer and disk writer. Runs all generated Go files through `go/format` before writing.
@@ -115,7 +117,7 @@ When making changes to `gocraft`, ensure these invariants are preserved:
 
 - **Registration**: Every new emitted file must be registered in `internal/generator/files.go` with its corresponding condition (`Cond`).
 - **Verbatim Assets**: Files with `Copy: true` (HTML templates, emails, SQL migrations) are copied verbatim to avoid double-evaluation of template directives.
-- **Dependency Pinning**: New third-party packages must have their version pinned in `requireVersions` (`internal/spec/resolve.go`) and registered in `requires()`.
+- **Dependency Pinning**: New third-party packages must have their version pinned in `requireVersions` (`internal/spec/requires.go`) and registered in `requires()`.
 - **Template Escaping**: Literal `{{ }}` inside rendered templates (e.g. format strings in Makefiles) must be escaped as `{{ "{{" }}...{{ "}}" }}`.
 
 ---

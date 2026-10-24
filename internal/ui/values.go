@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/VJ-2303/gocraft/internal/spec"
 )
@@ -227,12 +228,5 @@ func (v *wizardValues) destructiveConflict(id string, optionValue string) (strin
 }
 
 func formatList(items []string) string {
-	if len(items) == 0 {
-		return ""
-	}
-	result := items[0]
-	for i := 1; i < len(items); i++ {
-		result += ", " + items[i]
-	}
-	return result
+	return strings.Join(items, ", ")
 }
