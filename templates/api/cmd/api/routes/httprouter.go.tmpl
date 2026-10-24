@@ -18,7 +18,6 @@ func (app *application) routes() http.Handler {
 
 {{- if .AccountsJWT}}
 
-	// User account routes, adapted to httprouter's handler signature.
 	handler := func(next http.HandlerFunc) httprouter.Handle {
 		return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 			next(w, r)
@@ -30,7 +29,6 @@ func (app *application) routes() http.Handler {
 	mux.POST("/v1/tokens/authentication", handler(app.createAuthenticationToken))
 	mux.GET("/v1/me", handler(app.requireAuthenticatedUser(app.whoami)))
 {{- end}}
-	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
 {{- if .BasicAuth}}
 	handler = app.basicAuth(handler)

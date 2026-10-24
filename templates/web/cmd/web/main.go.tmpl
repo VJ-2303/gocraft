@@ -64,8 +64,6 @@ func main() {
 // returned and handled by main, keeping this function's control flow simple.
 func run() error {
 {{- if eq .ConfigSource "flags"}}
-	// Parse the configuration settings for the application from the
-	// command-line flags.
 	var cfg config
 
 	flag.StringVar(&cfg.baseURL, "base-url", "http://localhost:{{.Port}}", "base URL for the application")
@@ -162,11 +160,9 @@ func run() error {
 	}
 {{- end}}
 
-	// Initialize a logger writing to standard output.
 	logger := newLogger()
 
 {{- if .NeedsDB}}
-	// Initialize the database connection pool.
 	ctx, cancel := context.WithTimeout(context.Background(), database.DefaultTimeout)
 	defer cancel()
 
@@ -193,18 +189,12 @@ func run() error {
 {{- end}}
 {{- end}}
 
-	// Initialize the HTML template renderer. Templates are parsed once
-	// here, not on each request.
 	htmlRenderer, err := response.NewHTMLRenderer(assets.HTMLFiles, funcs.All())
 	if err != nil {
 		return fmt.Errorf("initializing template renderer: %w", err)
 	}
 
 {{- if .Sessions}}
-
-	// Initialize a new session manager, backed by the database. The
-	// session cookie holds only a random token; the session data itself
-	// lives in the sessions table.
 	sessionManager := scs.New()
 	sessionManager.Lifetime = 7 * 24 * time.Hour
 	sessionManager.Cookie.Secure = true
@@ -220,9 +210,6 @@ func run() error {
 {{- end}}
 {{- end}}
 {{- if .NeedsMailer}}
-
-	// Initialize the mailer with the embedded email templates and the
-	// configured SMTP settings.
 	mailer, err := mailer.New(logger, assets.EmailFiles, funcs.All(), cfg.smtp.host, cfg.smtp.port, cfg.smtp.username, cfg.smtp.password, cfg.smtp.from)
 	if err != nil {
 		return fmt.Errorf("initializing mailer: %w", err)
@@ -253,48 +240,32 @@ func run() error {
 
 	srv := app.newServer()
 
-	// Initialize a channel to receive any errors that occur during the
-	// graceful shutdown of the http.Server instance.
 	shutdownError := make(chan error)
 
-	// Initialize a goroutine that listens for interrupt or termination
-	// signals and gracefully shuts down the http.Server instance.
 	go func() {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 		<-quit
 
 		logger.Info("shutting down server", slog.Group("server", "addr", srv.Addr))
-
-		// Call Shutdown() on the server with a context, which will do a
-		// graceful shutdown without interrupting any active connections.
-		// There is no timeout: shutdown completes when the last active
-		// connection finishes.
 		shutdownError <- srv.Shutdown(context.Background())
 	}()
 
 	logger.Info("starting server", slog.Group("server", "addr", srv.Addr))
 
 {{- if .AutoHTTPS}}
-	// When a domain is configured, serve over HTTPS with automatically
-	// managed certificates; otherwise serve plain HTTP.
 	if cfg.autoHTTPS.domain != "" {
 		err = app.serveAutoHTTPS(srv)
 	} else {
 		err = srv.ListenAndServe()
 	}
 {{- else}}
-	// Call ListenAndServe() to start the server. If it returns
-	// http.ErrServerClosed then that means the server was shut down
-	// gracefully and we can proceed; any other error is a problem.
 	err = srv.ListenAndServe()
 {{- end}}
 	if !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 
-	// Wait for the graceful shutdown to complete, and return any error
-	// that occurred during it.
 	err = <-shutdownError
 	if err != nil {
 		return err

@@ -1,4 +1,3 @@
-# Command-line and environment variable settings for the admin commands.
 GOFLAGS ?= -trimpath
 STATICCHECK := go run honnef.co/go/tools/cmd/staticcheck@latest
 GOVULNCHECK := go run golang.org/x/vuln/cmd/govulncheck@latest
@@ -10,48 +9,39 @@ DB_DSN ?= {{.Driver.ExampleDSN}}
 
 .DEFAULT_GOAL := help
 
-## help: Print a list of available commands with their descriptions.
-help:
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_\/-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+help: ## Print available commands
+	@awk 'BEGIN {FS = ":.*?## "; printf "\nUsage:\n  make \033[36m<target>\033[0m\n\n"} /^[a-zA-Z_\/-]+:.*?## / { printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2 } END { printf "\n" }' $(MAKEFILE_LIST)
 
-## audit: Run all tests, verify modules, check .go file formatting, and run go vet, staticcheck and govulncheck.
-audit: test
+audit: test ## Run tests, verify modules, format check, vet, staticcheck, govulncheck
 	go mod verify
 	test -z "$$(gofmt -l .)" || (gofmt -l . && echo "code is not gofmt-clean" && exit 1)
 	go vet ./...
 	$(STATICCHECK) ./...
 	$(GOVULNCHECK) ./...
 
-## test: Run all tests, with race detection and VCS stamping enabled.
-test:
+test: ## Run tests with race detector
 	go test $(GOFLAGS) -race ./...
 
-## test/cover: Run all tests with coverage, save results to /tmp/coverage.out, and display an HTML report.
-test/cover:
+test/cover: ## Run tests with coverage report
 	go test $(GOFLAGS) -race -coverprofile=/tmp/coverage.out ./...
 	go tool cover -html=/tmp/coverage.out -o /tmp/coverage.html
 	go tool cover -func=/tmp/coverage.out
 
-## upgradeable: Interactively update direct module dependencies that have upgrades available.
-upgradeable:
+upgradeable: ## Update direct dependencies with available upgrades
 	go run github.com/oligot/go-mod-upgrade@latest
 
-## tidy: Run go mod tidy -v, apply go fix, and format all Go files with go fmt.
-tidy:
+tidy: ## Run go mod tidy, go fix, and gofmt
 	go mod tidy -v
 	go fix ./...
 	gofmt -w .
 
-## build: Build the {{.CmdDir}} application and output the binary to /tmp/bin.
-build:
+build: ## Build the {{.CmdDir}} application binary
 	go build $(GOFLAGS) -o /tmp/bin/{{.CmdDir}} ./cmd/{{.CmdDir}}
 
-## run: Build and run the {{.CmdDir}} application.
-run: build
+run: build ## Build and run the {{.CmdDir}} application
 	/tmp/bin/{{.CmdDir}}
 
-## run/live: Build and run the {{.CmdDir}} application with live reloading, rebuilding on file changes.
-run/live:
+run/live: ## Run with live reload via air
 	@if ! command -v air >/dev/null 2>&1; then \
 		echo "air is not installed; install it with: go install github.com/air-verse/air@latest"; \
 		exit 1; \
@@ -63,28 +53,22 @@ run/live:
 		-build.exclude_dir "tmp,vendor"
 {{- if .Migrations}}
 
-## migrations/new: Create a new pair of migration files in $(MIGRATIONS_DIR). Usage: make migrations/new name=add_example_table
-migrations/new:
+migrations/new: ## Create new migration files (name=...)
 	$(MIGRATE) create -seq -ext=.sql -dir=$(MIGRATIONS_DIR) -name=$(name)
 
-## migrations/up: Apply all up migrations.
-migrations/up:
+migrations/up: ## Apply all up migrations
 	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" up
 
-## migrations/down: Roll back the most recent migration.
-migrations/down:
+migrations/down: ## Roll back the most recent migration
 	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" down 1
 
-## migrations/goto: Migrate up or down to a specific version. Usage: make migrations/goto version=N
-migrations/goto:
+migrations/goto: ## Migrate to specific version (version=N)
 	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" goto $(version)
 
-## migrations/force: Set the database to a version without running migrations. Usage: make migrations/force version=N
-migrations/force:
+migrations/force: ## Set migration version without running (version=N)
 	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" force $(version)
 
-## migrations/version: Print the current migration version.
-migrations/version:
+migrations/version: ## Print current migration version
 	$(MIGRATE) -path=$(MIGRATIONS_DIR) -database="$(DB_DSN)" version
 {{- end}}
 

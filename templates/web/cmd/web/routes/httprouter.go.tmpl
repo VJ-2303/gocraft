@@ -16,10 +16,8 @@ import (
 func (app *application) routes() http.Handler {
 	mux := httprouter.New()
 
-	// Serve static files from the embedded assets.
 	mux.Handler(http.MethodGet, "/static/*filepath", http.FileServerFS(app.static))
 
-	// Application routes.
 	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.home(w, r)
 	})
@@ -29,11 +27,9 @@ func (app *application) routes() http.Handler {
 	})
 {{end}}
 
-	// Any other path is not found.
 	mux.NotFound = http.HandlerFunc(app.notFound)
 {{if .AccountsFull}}
 
-	// User account routes, adapted to httprouter's handler signature.
 	handler := func(next http.HandlerFunc) httprouter.Handle {
 		return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 			ctx := context.WithValue(r.Context(), paramsContextKey, ps)
@@ -53,16 +49,7 @@ func (app *application) routes() http.Handler {
 	mux.GET("/password-reset/:token", handler(app.requireAnonymous(app.passwordReset)))
 	mux.POST("/password-reset/:token", handler(app.requireAnonymous(app.passwordResetSubmit)))
 	mux.GET("/password-reset-confirmation", handler(app.requireAnonymous(app.passwordResetConfirmation)))
-{{end}}	mux.GET("/", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		app.home(w, r)
-	})
-{{if .BasicAuth}}
-	mux.GET("/restricted-basic-auth", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
-		app.restrictedBasicAuth(w, r)
-	})
 {{end}}
-
-	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
 {{- if .AccountsFull}}
 	handler = app.authenticate(handler)
