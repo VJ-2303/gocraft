@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
-			name: "valid web with every plus feature",
+			name: "valid web with all platform features",
 			mutate: func(s *ProjectSpec) {
 				s.Database = DBSQLite
 				s.Migrations = true

@@ -104,8 +104,8 @@ func TestGateGenerate(t *testing.T) {
 			s.ApplyDependencies()
 			return s
 		}(),
-		// Exercises every Plus platform feature together.
-		"plusapp": func() spec.ProjectSpec {
+		// Exercises platform and services features together.
+		"platformapp": func() spec.ProjectSpec {
 			s := testSpec()
 			s.Database = spec.DBSQLite
 			s.Migrations = true
@@ -794,7 +794,7 @@ func TestGenerateSessionsAndCookies(t *testing.T) {
 	}
 }
 
-func TestGeneratePlusFeatures(t *testing.T) {
+func TestGeneratePlatformFeatures(t *testing.T) {
 	s := testSpec()
 	s.CustomErrorPages = true
 	s.Emails = true
@@ -982,8 +982,8 @@ func matrixSpecs() map[string]spec.ProjectSpec {
 		s.AccountsJWT = true
 	})
 
-	// Plus platform features together.
-	add("web-plus", func(s *spec.ProjectSpec) {
+	// Platform features together.
+	add("web-platform", func(s *spec.ProjectSpec) {
 		s.AutoHTTPS = true
 		s.CustomErrorPages = true
 		s.Emails = true

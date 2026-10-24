@@ -127,8 +127,8 @@ type ResolvedSpec struct {
 	SessionCookieName string
 
 	// BasicAuthHashedPassword is the bcrypt hash of the default basic
-	// auth password ("pa55word"), shipped as the flag default like
-	// Autostrada's generated codebases.
+	// auth password ("pa55word"), shipped as the flag default for
+	// out-of-the-box local testing.
 	BasicAuthHashedPassword string
 
 	// CookieSecretKey is a random 32-character string used by the secure
