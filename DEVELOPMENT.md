@@ -6,26 +6,26 @@ Operational and technical documentation for developing, testing, and contributin
 
 ## Architecture Overview
 
-`gocraft` uses a strictly decoupled 4-layer architecture:
+`gocraft` uses a strictly decoupled 5-layer architecture:
 
-```
-cmd/gocraft/main.go
-       │
-       ├──► Interactive TTY? ──► internal/ui (Bubble Tea TUI)
-       └──► Flags or non-TTY? ─► internal/cli (POSIX Headless Runner)
-                                        │
-                                        ▼
-                                  internal/spec
-                        (ProjectSpec ──► Validate ──► Resolve)
-                                        │
-                                        ▼
-                                internal/generator
-                        (File Matrix ──► text/template ──► go/format)
+```mermaid
+flowchart TD
+    Main["cmd/gocraft<br/>entrypoint"] --> Update["internal/update<br/>release check + upgrade"]
+    Main --> TTY{"Interactive TTY?"}
+    TTY -->|yes| UI["internal/ui<br/>Bubble Tea wizard"]
+    TTY -->|no| CLI["internal/cli<br/>headless runner"]
+    UI --> Spec["internal/spec<br/>ProjectSpec -> Validate -> Resolve"]
+    CLI --> Spec
+    Spec --> Gen["internal/generator<br/>file matrix -> templates -> gofmt"]
 ```
 
 ### Layer Responsibilities
 
-- **`cmd/gocraft/`**: Application entrypoint. Inspects flags, initializes logging, detects interactive terminal vs. headless invocation, and routes execution to `internal/ui` or `internal/cli`.
+- **`cmd/gocraft/`**: Application entrypoint. Inspects flags, initializes logging, detects interactive terminal vs. headless invocation, and routes execution to `internal/ui` or `internal/cli`. Subcommands (`version`, `upgrade`) are handled here.
+- **`internal/update/`**: Release awareness:
+  - `update.go`: Version comparison, 24-hour check cache, and the startup notice.
+  - `check.go`: Resolves the latest GitHub release tag (API with redirect fallback).
+  - `upgrade.go`: Downloads the matching archive, verifies its SHA-256 checksum, and atomically replaces the running binary.
 - **`internal/ui/`**: Bubble Tea interactive TUI. Manages multi-step wizard state, real-time dependency cascade visualization, conflict resolution, and the review screen.
 - **`internal/cli/`**: Headless runner for scripts and AI agents. Parses CLI flags, validates arguments, and outputs plain text or structured JSON.
 - **`internal/spec/`**: Core domain logic and single source of truth:
@@ -54,6 +54,7 @@ cmd/gocraft/main.go
 | `internal/generator/` | File matrix, rendering engine, and gofmt validator |
 | `internal/spec/` | Spec structs, validation rules, dependency resolution |
 | `internal/ui/` | Bubble Tea wizard model, views, validation, and theme |
+| `internal/update/` | Version check cache, update notice, self-upgrade command |
 | `scripts/` | Cross-platform installation scripts (`install.sh`, `install.ps1`) |
 | `templates/` | Embedded Go template files and verbatim assets |
 | `.github/workflows/` | GitHub Actions release automation |

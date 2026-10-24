@@ -53,6 +53,32 @@ Or grab a binary directly from [GitHub Releases](https://github.com/VJ-2303/gocr
 
 ---
 
+## Updating
+
+gocraft checks for a newer release once a day and prints a short hint when one exists. It never updates itself silently, so a command that worked yesterday produces the same output today.
+
+```bash
+gocraft upgrade              # install the latest release
+gocraft upgrade --check      # only report what is available
+gocraft upgrade --version v0.2.0   # install a specific tag
+```
+
+The download is verified against the release's `checksums.txt` before the binary is replaced. On Windows the old executable is moved aside first, because a running binary cannot be overwritten in place.
+
+Checks skip themselves in CI, `--json` and `--quiet` runs, and source builds (`version == dev`). To turn them off entirely:
+
+```bash
+export GOCRAFT_NO_UPDATE_CHECK=1
+```
+
+Installed with `go install`? Update the usual way instead — gocraft will tell you:
+
+```bash
+go install github.com/VJ-2303/gocraft/cmd/gocraft@latest
+```
+
+---
+
 ## Getting Started
 
 ### The interactive way

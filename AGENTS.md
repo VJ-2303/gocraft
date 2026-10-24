@@ -30,6 +30,7 @@ non-empty targets.
 | `internal/spec/resolve.go` | `ResolvedSpec` view-model, `ApplyDependencies()`, `String()` |
 | `internal/spec/drivers.go` | `GoVersion`, `DriverInfo`, `drivers`, `migrateTags`, `BasicAuthHashedPassword` |
 | `internal/spec/requires.go` | `requireVersions` pins + `requires()` (go.mod deps) |
+| `internal/update/` | `update.go` check cache + notice, `check.go` release lookup, `upgrade.go` verified self-replace |
 | `internal/generator/generator.go` | Render + write loop; gofmt via `go/format`; `go mod tidy` |
 | `internal/generator/files.go` | **The file matrix** — every emitted file, with `Cond` and `Copy` |
 | `internal/ui/ui.go` | Interactive TUI entrypoint (`ui.Run`) |
@@ -121,6 +122,14 @@ non-empty targets.
   `cfg.basicAuth.hashedPassword`, `cfg.smtp.host`) — keep flags, env
   reads and struct fields in sync across flags/env variants of
   `cmd/*/main.go.tmpl`.
+- `internal/update/upgrade.go` hardcodes the release layout:
+  `gocraft_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) plus
+  `checksums.txt`. Renaming archives in `.goreleaser.yaml` breaks
+  `gocraft upgrade`. The binary name inside the archive must stay
+  `gocraft` (`gocraft.exe` on Windows).
+- `main.version` is empty (`dev`) for local builds, so self-upgrade is
+  refused and update notices stay silent. Test release behavior with
+  `go build -ldflags "-X main.version=v0.1.0"`.
 
 ## Git and release conventions
 
