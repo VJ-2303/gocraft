@@ -1,5 +1,9 @@
 # gocraft
 
+[![CI](https://github.com/VJ-2303/gocraft/actions/workflows/ci.yml/badge.svg)](https://github.com/VJ-2303/gocraft/actions/workflows/ci.yml)
+[![Go Version](https://img.shields.io/badge/go-1.27-00ADD8?logo=go)](go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Stop writing the same Go boilerplate. Start building.
 
 `gocraft` is an open-source, terminal-native project generator that scaffolds production-ready Go web applications and JSON APIs in seconds. You answer a few questions (or pass some flags), and it hands you a clean, runnable codebase — structured the way experienced Go developers actually write Go.

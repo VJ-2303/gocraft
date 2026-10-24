@@ -90,7 +90,7 @@ make matrix
 If `make gate` or `make matrix` fails with "target directory is not empty" after an interrupted run, clean the temporary directories first:
 
 ```bash
-rm -rf /tmp/nmb-gate /tmp/nmb-matrix
+rm -rf /tmp/gocraft-gate /tmp/gocraft-matrix
 ```
 
 ---

@@ -44,18 +44,18 @@ run/live: ## Run gocraft with live reload via air
 	air
 
 gate: ## Generate and verify 13 representative codebases
-	@rm -rf /tmp/nmb-gate
-	@NMB_GATE_DIR=/tmp/nmb-gate go test -count=1 -run TestGateGenerate ./internal/generator/
-	@set -e; for dir in /tmp/nmb-gate/*/; do \
+	@rm -rf /tmp/gocraft-gate
+	@GOCRAFT_GATE_DIR=/tmp/gocraft-gate go test -count=1 -run TestGateGenerate ./internal/generator/
+	@set -e; for dir in /tmp/gocraft-gate/*/; do \
 		echo "== verifying $$(basename $$dir) =="; \
 		(cd $$dir && go build ./... && go vet ./... && go test ./...); \
 	done; \
 	echo "gate: all generated codebases build, vet and test cleanly"
 
 matrix: ## Generate and audit 29 permutation codebases
-	@rm -rf /tmp/nmb-matrix
-	@NMB_MATRIX_DIR=/tmp/nmb-matrix go test -count=1 -run TestMatrixGenerate ./internal/generator/
-	@set -e; for dir in /tmp/nmb-matrix/*/; do \
+	@rm -rf /tmp/gocraft-matrix
+	@GOCRAFT_MATRIX_DIR=/tmp/gocraft-matrix go test -count=1 -run TestMatrixGenerate ./internal/generator/
+	@set -e; for dir in /tmp/gocraft-matrix/*/; do \
 		name=$$(basename $$dir); \
 		echo "== auditing $$name =="; \
 		(cd $$dir && go build ./... && go vet ./... && go test ./...); \

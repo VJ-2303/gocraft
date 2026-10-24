@@ -12,13 +12,16 @@ import (
 )
 
 // TestGateGenerate writes one example codebase per application type to
-// $NMB_GATE_DIR so that external tooling (make gate) can compile and run
+// $GOCRAFT_GATE_DIR so that external tooling (make gate) can compile and run
 // the generated applications as an end-to-end check. It is skipped when the
 // environment variable is unset.
 func TestGateGenerate(t *testing.T) {
-	gateDir := os.Getenv("NMB_GATE_DIR")
+	gateDir := os.Getenv("GOCRAFT_GATE_DIR")
 	if gateDir == "" {
-		t.Skip("NMB_GATE_DIR not set")
+		gateDir = os.Getenv("NMB_GATE_DIR")
+	}
+	if gateDir == "" {
+		t.Skip("GOCRAFT_GATE_DIR not set")
 	}
 
 	specs := map[string]spec.ProjectSpec{
@@ -1024,12 +1027,15 @@ func matrixSpecs() map[string]spec.ProjectSpec {
 }
 
 // TestMatrixGenerate writes one codebase per matrix spec to
-// $NMB_MATRIX_DIR for the make matrix target to compile, vet and test.
+// $GOCRAFT_MATRIX_DIR for the make matrix target to compile, vet and test.
 // It is skipped when the environment variable is unset.
 func TestMatrixGenerate(t *testing.T) {
-	matrixDir := os.Getenv("NMB_MATRIX_DIR")
+	matrixDir := os.Getenv("GOCRAFT_MATRIX_DIR")
 	if matrixDir == "" {
-		t.Skip("NMB_MATRIX_DIR not set")
+		matrixDir = os.Getenv("NMB_MATRIX_DIR")
+	}
+	if matrixDir == "" {
+		t.Skip("GOCRAFT_MATRIX_DIR not set")
 	}
 
 	for name, s := range matrixSpecs() {

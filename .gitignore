@@ -1,16 +1,35 @@
+# Binaries
+/gocraft
+/gocraft.exe
+
+# Build / release artifacts
+dist/
+tmp/
+tmp-bin/
+
 # Editor and OS noise
 .DS_Store
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
+Thumbs.db
 
 # Test and coverage artifacts
 *.test
 *.out
 coverage.html
+coverage.out
+*.coverprofile
 
+# GoReleaser / goreleaser dist already above
+# Local env
+.env
+.env.local
+
+# Local tool state (never commit)
 .codegraph/
-.projectmem/events.jsonl
-.projectmem/watch.pid
-.projectmem/watch.log
-.projectmem/structure.json
+.projectmem/
+
+# Generated test output (/tmp is absolute — not tracked)

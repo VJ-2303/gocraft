@@ -16,7 +16,7 @@ make matrix       # 29 permutations: build + vet + test + gofmt + stray-file
 
 Never commit red. `make matrix` is slow (~2 min, downloads deps per
 codebase); `make gate` is the fast loop. Regenerate with `rm -rf
-/tmp/nmb-gate` first if the directory check fails — generation refuses
+/tmp/gocraft-gate` first if the directory check fails — generation refuses
 non-empty targets.
 
 ## Repo layout
@@ -104,7 +104,7 @@ non-empty targets.
 ## Known traps
 
 - `make gate`/`make matrix` fail with "target directory is not empty"
-  after a partial run: `rm -rf /tmp/nmb-gate /tmp/nmb-matrix` first.
+  after a partial run: `rm -rf /tmp/gocraft-gate /tmp/gocraft-matrix` first.
 - scs database stores are separate nested modules
   (`github.com/alexedwards/scs/{sqlite3store,postgresstore,mysqlstore}`);
   the core is `/v2`. Imports must not carry `/v2` on the store path.
