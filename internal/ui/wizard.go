@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/vj/nomoreboiler/internal/generator"
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/generator"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // questionKind is the interaction style of a question.

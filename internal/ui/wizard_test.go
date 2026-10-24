@@ -1,11 +1,11 @@
 package ui
 
 import (
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/spec"
 	"testing"
 
+	"github.com/VJ-2303/gocraft/internal/generator"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/vj/nomoreboiler/internal/generator"
 )
 
 // keyRunes builds a runes key message, the way a terminal delivers

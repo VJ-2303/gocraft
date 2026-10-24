@@ -1,4 +1,4 @@
-module github.com/vj/nomoreboiler
+module github.com/VJ-2303/gocraft
 
 go 1.27
 

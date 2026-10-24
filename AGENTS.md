@@ -23,7 +23,7 @@ non-empty targets.
 
 | Path | Purpose |
 |---|---|
-| `cmd/nomoreboiler/main.go` | Tool entrypoint: flags, slog, `ui.Run` |
+| `cmd/gocraft/main.go` | Tool entrypoint: flags, slog, `ui.Run` |
 | `internal/spec/spec.go` | `ProjectSpec` — every wizard answer |
 | `internal/spec/validate.go` | Option legality + dependency rules (source of truth) |
 | `internal/spec/resolve.go` | `ResolvedSpec` view-model, drivers, `requireVersions` pins, `BasicAuthHashedPassword` |
@@ -80,7 +80,7 @@ non-empty targets.
    ErrorLog, no panics outside `newLogger`-style startup helpers.
 6. Generated codebases never contain: TODO/FIXME, stray artifacts
    (*.sqlite, logs, .air.toml, tmp/), plaintext passwords (basic auth
-   default is a bcrypt hash), or references to nomoreboiler beyond the
+   default is a bcrypt hash), or references to gocraft beyond the
    README attribution line.
 
 ## Wizard testing pattern

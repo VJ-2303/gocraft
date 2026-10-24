@@ -3,7 +3,7 @@ package generator
 import (
 	"fmt"
 
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // FileSpec selects one file for generation. Template is the path of the

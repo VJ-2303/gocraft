@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/vj/nomoreboiler/internal/generator"
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/generator"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // scenario is a full set of desired answers, keyed by question title.

@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/vj/nomoreboiler/internal/ui"
+	"github.com/VJ-2303/gocraft/internal/ui"
 )
 
 // version holds the version of the application. It is overridden at build
@@ -37,7 +37,7 @@ func run() error {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("nomoreboiler %s\n", version)
+		fmt.Printf("gocraft %s\n", version)
 		return nil
 	}
 
