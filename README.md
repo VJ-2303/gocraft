@@ -10,20 +10,29 @@ Built for both **humans** (interactive Bubble Tea TUI with live dependency inspe
 
 ## Installation
 
-Requires **Go 1.27** or later.
+### macOS & Linux (Shell Script)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/VJ-2303/gocraft/main/scripts/install.sh | sh
+```
+
+### Windows (PowerShell)
+
+```powershell
+irm https://raw.githubusercontent.com/VJ-2303/gocraft/main/scripts/install.ps1 | iex
+```
+
+### Go Toolchain
+
+Requires Go 1.27 or later:
 
 ```bash
 go install github.com/VJ-2303/gocraft/cmd/gocraft@latest
 ```
 
-Or clone and build locally:
+### Manual Download
 
-```bash
-git clone https://github.com/VJ-2303/gocraft.git
-cd gocraft
-make build
-# Binary created at /tmp/bin/gocraft
-```
+Download pre-compiled binaries and SHA-256 checksums for Linux, macOS, and Windows from [GitHub Releases](https://github.com/VJ-2303/gocraft/releases).
 
 ---
 
@@ -204,6 +213,17 @@ make matrix        # Generate 29 permutations and run full audit:
 Before committing any changes to templates, run `make gate` (fast verification) or `make matrix` (exhaustive 29-codebase permutation audit).
 
 See [AGENTS.md](AGENTS.md) for architectural invariants and contributing guidelines.
+
+### Publishing Releases
+
+Releases are automated via GitHub Actions and GoReleaser. To publish a new release across all platforms:
+
+```bash
+git tag -a v1.0.0 -m "Release v1.0.0"
+git push origin v1.0.0
+```
+
+The release pipeline runs all verification gates, cross-compiles binaries for Linux, macOS, and Windows (`amd64` and `arm64`), generates checksums and changelogs, and publishes the GitHub release.
 
 ---
 
