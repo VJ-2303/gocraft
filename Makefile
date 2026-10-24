@@ -30,13 +30,13 @@ tidy: ## Run go mod tidy, go fix, and gofmt
 	go fix ./...
 	gofmt -w .
 
-build: ## Build the nomoreboiler binary
-	go build $(GOFLAGS) -o /tmp/bin/nomoreboiler ./cmd/nomoreboiler
+build: ## Build the gocraft binary
+	go build $(GOFLAGS) -o /tmp/bin/gocraft ./cmd/gocraft
 
-run: build ## Build and run nomoreboiler
-	/tmp/bin/nomoreboiler
+run: build ## Build and run gocraft
+	/tmp/bin/gocraft
 
-run/live: ## Run nomoreboiler with live reload via air
+run/live: ## Run gocraft with live reload via air
 	@if ! command -v air >/dev/null 2>&1; then \
 		echo "air is not installed; install it with: go install github.com/air-verse/air@latest"; \
 		exit 1; \

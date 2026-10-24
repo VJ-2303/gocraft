@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 func TestApplyConvertsAndResolves(t *testing.T) {

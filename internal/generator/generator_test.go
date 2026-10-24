@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // TestGateGenerate writes one example codebase per application type to

@@ -3,8 +3,8 @@ package ui
 import (
 	"fmt"
 
-	"github.com/vj/nomoreboiler/internal/generator"
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/generator"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // printDone shows the final summary and getting-started instructions.

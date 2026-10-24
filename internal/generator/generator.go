@@ -13,8 +13,8 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/vj/nomoreboiler/internal/spec"
-	"github.com/vj/nomoreboiler/templates"
+	"github.com/VJ-2303/gocraft/internal/spec"
+	"github.com/VJ-2303/gocraft/templates"
 )
 
 // Result describes a completed generation run.

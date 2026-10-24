@@ -1,9 +1,9 @@
-# nomoreboiler
+# gocraft
 
 A terminal UI for generating production-ready Go web application and JSON
 API codebases — no boilerplate, no frameworks, no lock-in.
 
-`nomoreboiler` scaffolds a complete, runnable Go project in the idiomatic
+`gocraft` scaffolds a complete, runnable Go project in the idiomatic
 style popularized by Alex Edwards' *Let's Go* books: a `cmd/` + `internal/`
 layout, an `application` struct with dependency injection, `log/slog`
 logging, graceful shutdown, and a Makefile of admin commands. Every line of
@@ -19,13 +19,13 @@ template library.
 Requires Go 1.27 or later.
 
 ```
-go install github.com/vj/nomoreboiler/cmd/nomoreboiler@latest
+go install github.com/VJ-2303/gocraft/cmd/gocraft@latest
 ```
 
 ## Usage
 
 ```
-nomoreboiler
+gocraft
 ```
 
 The wizard asks one question per screen and answers accept a single

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/mod/module"
 
-	"github.com/vj/nomoreboiler/internal/spec"
+	"github.com/VJ-2303/gocraft/internal/spec"
 )
 
 // checkModulePath validates a Go module path.
