@@ -26,6 +26,18 @@ type Result struct {
 	Files []string
 }
 
+// PlannedFiles returns the relative file paths that would be emitted for rsp,
+// without writing anything to disk.
+func PlannedFiles(rsp spec.ResolvedSpec) []string {
+	var files []string
+	for _, f := range fileMatrix(rsp) {
+		if f.Cond {
+			files = append(files, f.OutPath)
+		}
+	}
+	return files
+}
+
 // Options controls post-generation processing.
 type Options struct {
 	// Tidy runs go mod tidy inside the generated codebase so that it

@@ -1,3 +1,4 @@
+// Package ui renders the interactive terminal interface for gocraft.
 package ui
 
 import (
@@ -7,85 +8,93 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// A quiet navy palette: the questions are the interface, everything
-// else stays out of the way.
+// Warm Editorial Palette:
+// Grounded charcoal, warm muted stone, and rich copper/amber accent.
+// Adheres strictly to the anti-AI-slop frontend-design principles:
+// restrained, typography-first, no purple gradients, no glowing boxes.
 var (
-	primaryColor = lipgloss.Color("32")  // navy blue
-	mutedColor   = lipgloss.Color("245") // soft gray
-	accentColor  = lipgloss.Color("39")  // bright blue
-	errorColor   = lipgloss.Color("203") // warm red
-	successColor = lipgloss.Color("35")  // green
+	colorFg      = lipgloss.Color("255") // #f5f5f4 chalk white
+	colorMuted   = lipgloss.Color("244") // #78716c warm stone gray
+	colorBorder  = lipgloss.Color("238") // #27272a dark slate border
+	colorAccent  = lipgloss.Color("178") // #d97706 warm amber / copper
+	colorSuccess = lipgloss.Color("71")  // #16a34a forest green / sage
+	colorWarning = lipgloss.Color("167") // #dc2626 warm terracotta
+	colorBadgeBg = lipgloss.Color("236") // subtle badge background
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
+	styleTitle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(primaryColor)
+			Foreground(colorFg)
 
-	descStyle = lipgloss.NewStyle().
-			Foreground(mutedColor)
-
-	counterStyle = lipgloss.NewStyle().
-			Foreground(mutedColor)
-
-	barDoneStyle = lipgloss.NewStyle().
-			Foreground(primaryColor)
-
-	barTodoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("238"))
-
-	cursorStyle = lipgloss.NewStyle().
-			Foreground(accentColor)
-
-	errorStyle = lipgloss.NewStyle().
-			Foreground(errorColor)
-
-	commandStyle = lipgloss.NewStyle().
-			Foreground(accentColor)
-
-	successStyle = lipgloss.NewStyle().
+	styleCategory = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(successColor)
+			Foreground(colorAccent)
 
-	warningStyle = lipgloss.NewStyle().
+	styleDesc = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	styleOptionNormal = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("252"))
+
+	styleOptionSelected = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(colorFg)
+
+	styleCursor = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(errorColor)
+			Foreground(colorAccent)
 
-	hintStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("238"))
+	styleBadge = lipgloss.NewStyle().
+			Foreground(colorSuccess).
+			Background(colorBadgeBg).
+			Padding(0, 1)
 
-	selectorMark = cursorStyle.Render("❯")
+	styleConflictBadge = lipgloss.NewStyle().
+				Foreground(colorWarning).
+				Background(colorBadgeBg).
+				Padding(0, 1)
 
-	selectedValueStyle = lipgloss.NewStyle().Bold(true)
+	styleInspectorTitle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(colorAccent)
+
+	styleInspectorText = lipgloss.NewStyle().
+				Foreground(colorMuted)
+
+	styleInspectorActive = lipgloss.NewStyle().
+				Foreground(colorFg)
+
+	styleKeyHint = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	styleKey = lipgloss.NewStyle().
+			Foreground(colorAccent).
+			Bold(true)
+
+	stylePaneBorder = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder(), false, false, false, true).
+			BorderForeground(colorBorder).
+			PaddingLeft(2)
+
+	styleInput = lipgloss.NewStyle().
+			Foreground(colorFg).
+			Bold(true)
+
+	styleInputPrompt = lipgloss.NewStyle().
+				Foreground(colorAccent).
+				Bold(true)
+
+	styleError = lipgloss.NewStyle().
+			Foreground(colorWarning).
+			Bold(true)
 )
 
-// progress renders the progress bar and the n/total counter.
-func progress(position, total int) string {
-	segments := total
-	if segments > 24 {
-		segments = 24
+// formatHelp returns a formatted keybinding hint string.
+func formatHelp(hints ...[2]string) string {
+	var parts []string
+	for _, h := range hints {
+		parts = append(parts, fmt.Sprintf("%s %s", styleKey.Render(h[0]), styleKeyHint.Render(h[1])))
 	}
-	done := 0
-	if total > 0 {
-		done = position * segments / total
-	}
-	bar := barDoneStyle.Render(strings.Repeat("▰", done)) +
-		barTodoStyle.Render(strings.Repeat("▱", segments-done))
-
-	return bar + " " + counterStyle.Render(fmt.Sprintf("%d/%d", position, total))
-}
-
-// questionLine renders the question title and its description on one
-// compact line.
-func questionLine(title, desc string) string {
-	line := titleStyle.Render(title)
-	if desc != "" {
-		line += " " + descStyle.Render("— "+desc)
-	}
-	return line
-}
-
-// help renders the footer hint line for a question.
-func help(hints ...string) string {
-	return hintStyle.Render(strings.Join(hints, " · "))
+	return strings.Join(parts, styleKeyHint.Render(" · "))
 }
