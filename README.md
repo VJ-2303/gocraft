@@ -1,188 +1,191 @@
 # gocraft
 
-A clean, terminal-native generator for production-grade Go web applications and JSON APIs — no frameworks, no reflection magic, zero lock-in.
+Stop writing the same Go boilerplate. Start building.
 
-`gocraft` scaffolds runnable Go codebases in the standard architecture popularized by Alex Edwards (*Let's Go* and *Let's Go Further*): explicit dependency injection via an `application` struct, standard library `net/http` conventions, structured `log/slog` logging, graceful shutdown, and a self-documenting Makefile. Every emitted line is standard Go, formatted with `go/format`, vetted, and 100% yours to keep under the MIT license.
+`gocraft` is an open-source, terminal-native project generator that scaffolds production-ready Go web applications and JSON APIs in seconds. You answer a few questions (or pass some flags), and it hands you a clean, runnable codebase — structured the way experienced Go developers actually write Go.
 
-Built for both **humans** (interactive Bubble Tea TUI with live dependency resolution) and **scripts/agents** (deterministic headless CLI runner with `--dry-run` and `--json`).
+The generated code follows the architecture from Alex Edwards' *Let's Go* and *Let's Go Further*: an `application` struct for dependency injection, standard library `net/http` routing, structured `log/slog` logging, graceful shutdown, and a Makefile that documents every command you need. No frameworks to learn. No magic to debug. Every line is yours.
 
----
-
-## Features
-
-- **Standard Library Core**: Zero heavy frameworks; built on standard library patterns, idiomatic middleware, and composable handlers.
-- **Dual Architectures**: Choose between server-rendered HTML **Web Applications** (with partials and static assets) or **JSON APIs** (with structured envelopes and standard error responses).
-- **Multiple SQL Dialects**: First-class support for **SQLite** (pure Go, CGO-free via `modernc.org/sqlite`), **PostgreSQL** (connection pooling via `jackc/pgx/v5`), and **MySQL** (`go-sql-driver/mysql`), or **None** for stateless services.
-- **Router Flexibility**: Standard library `http.ServeMux` (Go 1.22+ routing), `alexedwards/flow`, `go-chi/chi/v5`, `gorilla/mux`, or `julienschmidt/httprouter`.
-- **Production Authentication**:
-  - Full web auth: user registration, activation, login/logout, password reset, and CSRF protection via `justinas/nosurf`.
-  - API auth: user registration, activation emails, and signed JWT bearer tokens.
-  - Basic auth: HTTP Basic Auth middleware backed by bcrypt-hashed credentials.
-- **State & Storage**: Database-backed sessions (`alexedwards/scs`), cryptographically signed and encrypted cookies (HMAC-SHA256 + AES-GCM), and embedded SQL migrations.
-- **Observability & Security**: Structured `log/slog` logging (plaintext, JSON, or colorized), request latency tracking, automatic admin email error alerts on runtime panics, and automatic Let's Encrypt TLS via `autocert`.
-- **Comprehensive Test Suites**: Pre-configured test harnesses with in-memory SQLite instances and mock sessions.
+It works two ways: an **interactive TUI** that walks you through choices with live dependency previews, and a **headless CLI** for scripts, CI pipelines, and AI agents.
 
 ---
 
-## Installation
+## What You Get
 
-### macOS & Linux (Shell Script)
+Pick and choose. Every combination produces valid, compiling, tested Go code.
 
+**Application types** — Server-rendered HTML web apps (with template partials and static assets) or JSON APIs (with structured response envelopes and typed error payloads).
+
+**Databases** — SQLite (pure Go, no CGO), PostgreSQL (connection pooling via pgx), MySQL, or none at all for stateless services.
+
+**Routers** — The standard library `http.ServeMux` with Go 1.22+ method routing, or drop in `chi`, `flow`, `gorilla/mux`, or `httprouter`.
+
+**Authentication** — Full web auth with signup, login, logout, email activation, password reset, and CSRF protection. Or JWT bearer tokens for APIs. Or HTTP Basic Auth with bcrypt. Or nothing — your call.
+
+**The rest** — Database-backed sessions, encrypted cookies, embedded SQL migrations, SMTP email templates, request logging middleware, error notification emails, automatic Let's Encrypt TLS, custom error pages, and comprehensive test suites with in-memory database harnesses.
+
+---
+
+## Install
+
+Pick whichever method suits you:
+
+**macOS & Linux**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/VJ-2303/gocraft/main/scripts/install.sh | sh
 ```
 
-### Windows (PowerShell)
-
+**Windows (PowerShell)**
 ```powershell
 irm https://raw.githubusercontent.com/VJ-2303/gocraft/main/scripts/install.ps1 | iex
 ```
 
-### Go Toolchain (Go 1.27+)
-
+**Go toolchain** (requires Go 1.27+)
 ```bash
 go install github.com/VJ-2303/gocraft/cmd/gocraft@latest
 ```
 
-### Manual Download
-
-Download pre-compiled binaries and SHA-256 checksums for Linux, macOS, and Windows from [GitHub Releases](https://github.com/VJ-2303/gocraft/releases).
+Or grab a binary directly from [GitHub Releases](https://github.com/VJ-2303/gocraft/releases) — every release includes SHA-256 checksums.
 
 ---
 
-## Quick Start Tutorial
+## Getting Started
 
-### Method 1: Interactive TUI
+### The interactive way
 
-Launch `gocraft` with no arguments in any interactive terminal:
+Just run it:
 
 ```bash
 gocraft
 ```
 
-1. **Choose Application Type**: Select between `Web Application` (HTML) or `JSON API`.
-2. **Configure Core Settings**: Enter your Go module path (e.g., `github.com/myorg/myapp`), database engine, HTTP router, and config style.
-3. **Select Features**: Toggle sessions, authentication, migrations, request logging, or mailers.
-   - *Smart Prerequisite Resolution*: Selecting `Full Accounts` automatically activates SQLite, sessions, and emails.
-   - *Conflict Warning*: Downgrading a setting (such as switching database to `None` when migrations are enabled) prompts for confirmation before clearing dependents.
-4. **Review & Generate**: On the review screen, inspect the summary. Press `[1-9]` to jump directly to any question, or press `Enter` to select the target directory and scaffold your project.
+The TUI walks you through every decision:
 
-### Method 2: Headless CLI (Scripts & Automation)
+1. **Pick your app type** — Web or API.
+2. **Set your module path** — e.g. `github.com/yourname/yourapp`.
+3. **Choose your stack** — database, router, config style, log format.
+4. **Toggle features** — sessions, auth, migrations, mailer, whatever you need.
 
-Scaffold a project in a single command using CLI flags:
+The wizard handles dependencies for you. Turn on "Full Accounts" and it knows you need a database, sessions, and an email sender — those light up automatically. Try to remove the database while migrations are still on and it'll ask you to confirm before clearing things out.
+
+When you're happy with the summary, hit Enter, pick a directory, and your project is ready to `make run`.
+
+### The scripted way
+
+One command, no prompts:
 
 ```bash
-# Example: Full-featured Web App with SQLite and User Accounts
 gocraft \
   --app=web \
   --module=github.com/myorg/myapp \
   --db=sqlite \
   --router=chi \
-  --config=flags \
-  --log=plaintext \
   --migrations \
   --sessions \
   --accounts=full \
   --target=./myapp
+```
 
-# Example: Lightweight JSON API with PostgreSQL
+Or a leaner API project:
+
+```bash
 gocraft \
   --app=api \
   --module=github.com/myorg/myapi \
   --db=postgres \
-  --router=servemux \
   --config=env \
   --log=json \
   --migrations \
   --target=./myapi
 ```
 
-#### CLI Flags Reference
+Use `--dry-run` to preview the file tree without writing anything. Use `--json` for machine-readable output.
 
-| Flag | Default | Description |
+### All flags
+
+| Flag | Default | What it does |
 |---|---|---|
-| `--app` | `web` | Application type: `web` (HTML templates) or `api` (JSON) |
-| `--module` | `example.com/myapp` | Go module path |
-| `--db` | `none` | Database dialect: `none`, `sqlite`, `postgres`, `mysql` |
-| `--router` | `servemux` | HTTP router: `servemux`, `flow`, `chi`, `gorilla`, `httprouter` |
-| `--config` | `flags` | Config parser: `flags` (CLI flags) or `env` (environment variables) |
-| `--log` | `plaintext` | Log output format: `plaintext`, `json`, `colorized` |
-| `--migrations` | `false` | Embedded SQL migrations and Makefile management targets |
-| `--sessions` | `false` | Server-side sessions via `alexedwards/scs` (web only) |
-| `--accounts` | `none` | User accounts: `none`, `full` (web), or `jwt` (api) |
-| `--request-logging` | `false` | HTTP request logging middleware (IP, method, URI, latency) |
-| `--basic-auth` | `false` | HTTP Basic Auth middleware with bcrypt-hashed passwords |
-| `--git-integration` | `true` | Production `.gitignore` and Git version metadata package |
-| `--secure-cookies` | `false` | HMAC-SHA256 signing and AES-256-GCM cookie encryption |
-| `--auto-https` | `false` | Automatic Let's Encrypt TLS certificates via `autocert` |
-| `--custom-error-pages` | `false` | Custom 400, 401, 404, 500 error pages (web only) |
-| `--emails` | `false` | SMTP mailer helpers and multipart email templates |
-| `--error-notifications` | `false` | Email runtime panics and 500 errors to admin address |
-| `--tests` | `true` | Comprehensive handler and route test suites |
-| `--target` | `""` | Destination path (must be empty or not exist) |
-| `--dry-run` | `false` | Compute planned file tree without writing to disk |
-| `--json` | `false` | Output machine-readable JSON summary for tools/agents |
+| `--app` | `web` | `web` for HTML templates, `api` for JSON |
+| `--module` | `example.com/myapp` | Your Go module path |
+| `--db` | `none` | `none`, `sqlite`, `postgres`, or `mysql` |
+| `--router` | `servemux` | `servemux`, `flow`, `chi`, `gorilla`, or `httprouter` |
+| `--config` | `flags` | `flags` for CLI flags, `env` for environment variables |
+| `--log` | `plaintext` | `plaintext`, `json`, or `colorized` |
+| `--migrations` | `false` | Embedded SQL migrations with Makefile targets |
+| `--sessions` | `false` | Server-side sessions via scs (web only) |
+| `--accounts` | `none` | `none`, `full` (web), or `jwt` (api) |
+| `--request-logging` | `false` | Log every request with method, path, and latency |
+| `--basic-auth` | `false` | HTTP Basic Auth with bcrypt-hashed passwords |
+| `--git-integration` | `true` | `.gitignore` and build version metadata |
+| `--secure-cookies` | `false` | HMAC-signed and AES-encrypted cookies |
+| `--auto-https` | `false` | Automatic Let's Encrypt TLS |
+| `--custom-error-pages` | `false` | Styled 400/401/404/500 pages (web only) |
+| `--emails` | `false` | SMTP mailer and multipart email templates |
+| `--error-notifications` | `false` | Email alerts on panics and 500 errors |
+| `--tests` | `true` | Handler and route test suites |
+| `--target` | `""` | Output directory (must be empty or not exist) |
+| `--dry-run` | `false` | Preview file tree without writing |
+| `--json` | `false` | Machine-readable JSON output |
 | `--quiet` | `false` | Suppress progress messages |
-| `--auto-deps` | `true` | Automatically enable required prerequisites |
+| `--auto-deps` | `true` | Auto-enable prerequisites |
 
 ---
 
-## Working with Your Generated App
+## Your Generated Project
 
-Every scaffolded codebase is completely self-contained and runnable out of the box.
+The output is a self-contained Go project. No post-generation steps, no hidden dependencies — just `cd` in and start working.
 
-### Project Layout
+### Structure
 
 ```
-├── assets/                  Embedded assets (HTML templates, static assets, SQL migrations, emails)
-├── cmd/web|api/             Application entrypoint:
-│   ├── main.go              Bootstrap, config parsing, logger, database pool, DI container
-│   ├── server.go            HTTP server with graceful shutdown and timeouts
-│   ├── routes.go            Route declarations and middleware stack
-│   ├── handlers.go          HTTP handler methods
-│   ├── helpers.go           Template rendering or JSON encoding helpers
-│   ├── middleware.go        Panic recovery, request logging, security headers, auth guards
-│   ├── errors.go            Centralized HTTP error response helpers
-│   └── *_test.go            End-to-end route and handler tests
-├── internal/                Private application packages (only emitted when selected):
-│   ├── database/            Connection pool lifecycle and query models (users, tokens)
-│   ├── env/                 Type-safe environment variable parsing with validation
-│   ├── mailer/              SMTP client with embedded template rendering
-│   ├── auth/                JWT token issuance and validation helpers
-│   ├── cookies/             HMAC-signed and AES-GCM encrypted cookie helpers
-│   ├── validator/           Input validation and form/JSON error mapping
-│   ├── response/            Standardized response writers
-│   └── version/             Git revision and build metadata helpers
-├── Makefile                 Self-documenting build, test, audit, and migration tasks
-├── go.mod                   Clean module definition with pinned dependencies
-└── README.md                Dedicated getting-started guide for your application
+myapp/
+├── cmd/web/                 (or cmd/api/)
+│   ├── main.go              Config, logger, DB pool, dependency wiring
+│   ├── server.go            HTTP server with graceful shutdown
+│   ├── routes.go            All routes and middleware in one place
+│   ├── handlers.go          Your HTTP handlers
+│   ├── helpers.go           Template rendering or JSON helpers
+│   ├── middleware.go        Recovery, logging, security headers, auth
+│   ├── errors.go            Centralized error responses
+│   └── *_test.go            Tests for every handler
+├── assets/                  HTML templates, static files, migrations, emails
+├── internal/
+│   ├── database/            Connection pool and query models
+│   ├── mailer/              SMTP client with template rendering
+│   ├── auth/                JWT helpers (API projects)
+│   ├── cookies/             Signed & encrypted cookie helpers
+│   ├── validator/           Input validation
+│   ├── response/            Response writers
+│   └── version/             Git revision metadata
+├── Makefile                 Every command you need
+├── go.mod
+└── README.md                Getting-started guide for your app
 ```
 
-### Common Makefile Commands
+Only the packages you selected are generated. No dead code.
 
-Change into your generated project directory and use the built-in `Makefile`:
+### Day-one commands
 
 ```bash
-make help          # List all available targets and descriptions
-make run           # Build and run the application
-make run/live      # Run with live-reloading via air
-make test          # Run test suite with race detector
-make test/cover    # Run tests and generate an HTML coverage report
-make audit         # Run full quality gate: test, verify, gofmt, vet, staticcheck, govulncheck
-make tidy          # Run go mod tidy, go fix, and gofmt
-make migrations/up # Apply all pending database migrations (when enabled)
+cd myapp
+make run           # Build and start the server
+make run/live      # Live-reload with air
+make test          # Tests with race detector
+make audit         # Full quality gate: test + vet + staticcheck + govulncheck
+make migrations/up # Run pending migrations (if enabled)
+make help          # See everything else
 ```
 
 ---
 
-## Contributing & Development
+## Contributing
 
-Interested in how `gocraft` works under the hood, adding new templates, or contributing code?
+Want to add a feature, fix a template, or understand how the generator works?
 
-Read the [Developer Guide (DEVELOPMENT.md)](DEVELOPMENT.md) for internal architecture, testing matrices, code invariants, and release procedures.
+See the [Developer Guide](DEVELOPMENT.md) for architecture, testing, invariants, and release procedures.
 
 ---
 
 ## License
 
-[MIT](LICENSE) — free for personal, commercial, and open-source use, for both `gocraft` and every codebase it generates.
+[MIT](LICENSE) — use it however you want, for any purpose. The tool and every codebase it generates are yours.
