@@ -166,7 +166,7 @@ func (s *ProjectSpec) ApplyDependencies() {
 	if s.ErrorNotifications {
 		s.Emails = true
 	}
-	if s.Sessions && s.Database == DBNone {
+	if (s.Sessions || s.AccountsJWT) && s.Database == DBNone {
 		s.Database = DBSQLite
 	}
 }

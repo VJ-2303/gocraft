@@ -298,6 +298,15 @@ func TestApplyDependencies(t *testing.T) {
 			},
 		},
 		{
+			name: "accounts jwt defaults database to sqlite",
+			give: ProjectSpec{AppType: AppAPI, ModulePath: "example.com/a", AccountsJWT: true},
+			check: func(t *testing.T, got ProjectSpec) {
+				if got.Database != DBSQLite {
+					t.Fatalf("want sqlite database, got %q", got.Database)
+				}
+			},
+		},
+		{
 			name: "error notifications enables emails",
 			give: ProjectSpec{AppType: AppAPI, ModulePath: "example.com/a", ErrorNotifications: true},
 			check: func(t *testing.T, got ProjectSpec) {
