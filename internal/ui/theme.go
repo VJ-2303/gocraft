@@ -63,8 +63,6 @@ var (
 	hintStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("238"))
 
-	successMark  = successStyle.Render("✔")
-	failureMark  = warningStyle.Render("✗")
 	selectorMark = cursorStyle.Render("❯")
 )
 
