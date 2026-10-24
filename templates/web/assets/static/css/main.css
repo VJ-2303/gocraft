@@ -118,20 +118,23 @@ input[type="text"] {
 	background-color: var(--color-background);
 }
 
-input:focus {
+input:focus,
+button:focus-visible {
 	outline: 2px solid var(--color-primary);
-	outline-offset: 0;
+	outline-offset: 1px;
 	border-color: var(--color-primary);
 }
 
 button {
 	font: inherit;
 	padding: 0.5rem 1.25rem;
+	min-height: 2.5rem;
 	border: 0;
 	border-radius: 2px;
 	background-color: var(--color-primary);
 	color: #ffffff;
 	cursor: pointer;
+	touch-action: manipulation;
 }
 
 button:hover {
