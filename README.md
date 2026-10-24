@@ -1,155 +1,212 @@
 # gocraft
 
-A terminal UI for generating production-ready Go web application and JSON
-API codebases — no boilerplate, no frameworks, no lock-in.
+A clean, terminal-native generator for production-grade Go web applications and JSON APIs — no frameworks, no reflection magic, no lock-in.
 
-`gocraft` scaffolds a complete, runnable Go project in the idiomatic
-style popularized by Alex Edwards' *Let's Go* books: a `cmd/` + `internal/`
-layout, an `application` struct with dependency injection, `log/slog`
-logging, graceful shutdown, and a Makefile of admin commands. Every line of
-the generated code is yours to keep and edit — MIT licensed, no attribution
-required.
+`gocraft` scaffolds runnable Go codebases in the standard architecture popularized by Alex Edwards (*Let's Go* and *Let's Go Further*): explicit dependency injection via an `application` struct, standard library `net/http` conventions, structured `log/slog` logging, graceful shutdown, and a self-documenting Makefile. Every emitted line is standard Go, formatted with `go/format`, vetted, and 100% yours to keep under the MIT license.
 
-It replicates the full feature set of [autostrada.dev](https://autostrada.dev)
-— including its paid Plus tier — free of charge, with its own hand-written
-template library.
+Built for both **humans** (interactive Bubble Tea TUI with live dependency inspection) and **AI coding agents** (deterministic headless CLI runner with `--dry-run` and `--json`).
+
+---
 
 ## Installation
 
-Requires Go 1.27 or later.
+Requires **Go 1.27** or later.
 
-```
+```bash
 go install github.com/VJ-2303/gocraft/cmd/gocraft@latest
 ```
 
+Or clone and build locally:
+
+```bash
+git clone https://github.com/VJ-2303/gocraft.git
+cd gocraft
+make build
+# Binary created at /tmp/bin/gocraft
+```
+
+---
+
 ## Usage
 
-```
+`gocraft` provides dual interfaces with automatic environment detection:
+
+### 1. Interactive TUI (Human Mode)
+
+Run `gocraft` in any interactive terminal without flags:
+
+```bash
 gocraft
 ```
 
-The wizard asks one question per screen and answers accept a single
-keypress. Use `esc` to go back at any point and `ctrl+c` to abort.
+- **In-the-Moment Conflict Resolution**: Prerequisites (e.g. `Full Accounts -> SQLite + Sessions + Emails`) are displayed with live badges and auto-activated on selection.
+- **Destructive Downgrade Protection**: Switching a setting (like changing database to `None` with active migrations) triggers an inline confirmation prompt before resetting dependencies.
+- **Direct Review Jumps**: In the final review screen, press `[1-9]` to jump straight to any section; pressing Enter returns directly back to review.
+- **Warm Editorial Aesthetic**: Split-pane layout (terminal width ≥ 100 cols) with an active architecture blueprint and dependency inspector on the right.
 
-### Step 1 — Application type
+### 2. Headless CLI (Agent & Script Mode)
 
-- **Traditional web application** — server-side HTML rendering
-- **JSON API** — processes JSON requests and sends JSON responses
+Pass flags or pipe input from automated scripts, CI pipelines, or AI agents:
 
-The choice drives the whole codebase: web apps get HTML templates,
-partials, static file serving and session-based accounts; APIs get JSON
-envelopes, bearer-token authentication and `Error`/`FieldErrors` payloads.
+```bash
+# Scaffold a full-featured web app in one command
+gocraft \
+  --app=web \
+  --module=github.com/myorg/myapp \
+  --db=sqlite \
+  --router=chi \
+  --config=flags \
+  --log=plaintext \
+  --migrations \
+  --sessions \
+  --accounts=full \
+  --target=./myapp
 
-### Step 2 — Customize
+# Dry-run inspection without disk writes
+gocraft --app=api --db=postgres --dry-run
 
-| Setting | Choices |
+# Structured JSON output for agents
+gocraft --app=api --db=sqlite --target=./api --json
+```
+
+#### Available Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--app` | `web` | Application type: `web` (HTML templates) or `api` (JSON) |
+| `--module` | `example.com/myapp` | Go module path |
+| `--db` | `none` | Database dialect: `none`, `sqlite`, `postgres`, `mysql` |
+| `--router` | `servemux` | HTTP router: `servemux`, `flow`, `chi`, `gorilla`, `httprouter` |
+| `--config` | `flags` | Config parser: `flags` (CLI flags) or `env` (environment variables) |
+| `--log` | `plaintext` | Log output format: `plaintext`, `json`, `colorized` |
+| `--migrations` | `false` | Embedded SQL migrations and Makefile management targets |
+| `--sessions` | `false` | Server-side sessions via `alexedwards/scs` (web only) |
+| `--accounts` | `none` | User accounts: `none`, `full` (web), or `jwt` (api) |
+| `--request-logging` | `false` | HTTP request logging middleware (IP, method, URI, latency) |
+| `--basic-auth` | `false` | HTTP Basic Auth middleware with bcrypt-hashed passwords |
+| `--git-integration` | `true` | Production `.gitignore` and Git version metadata package |
+| `--secure-cookies` | `false` | HMAC-SHA256 signing and AES-256-GCM cookie encryption |
+| `--auto-https` | `false` | Automatic Let's Encrypt TLS certificates via `autocert` |
+| `--custom-error-pages` | `false` | Custom 400, 401, 404, 500 error pages (web only) |
+| `--emails` | `false` | SMTP mailer helpers and multipart email templates |
+| `--error-notifications` | `false` | Email runtime panics and 500 errors to admin address |
+| `--tests` | `true` | Comprehensive handler and route test suites |
+| `--target` | `""` | Destination path (must be empty or not exist) |
+| `--dry-run` | `false` | Compute planned file tree without writing to disk |
+| `--json` | `false` | Output machine-readable JSON summary |
+| `--quiet` | `false` | Suppress progress messages |
+| `--auto-deps` | `true` | Automatically enable required prerequisites |
+
+---
+
+## Feature Matrix
+
+Every combination of options produces valid, compiling, and fully vetted Go code:
+
+| Component | Options & Implementations |
 |---|---|
-| Database | None · SQLite · PostgreSQL · MySQL |
-| Router | http.ServeMux · Flow · Chi · Gorilla Mux · HttpRouter |
-| Configuration | Command-line flags · Environment variables |
-| Log format | Plaintext · JSON · Colorized plaintext |
+| **Architectures** | **Web Application** (server-side HTML, partials, static assets) · **JSON API** (structured JSON envelopes, error payloads) |
+| **Databases** | **None** (stateless) · **SQLite** (`modernc.org/sqlite`, pure Go, CGO-free) · **PostgreSQL** (`jackc/pgx/v5` connection pool) · **MySQL** (`go-sql-driver/mysql` with native timestamps) |
+| **Routers** | Standard Library `http.ServeMux` (Go 1.22+ method matching) · `alexedwards/flow` · `go-chi/chi/v5` · `gorilla/mux` · `julienschmidt/httprouter` |
+| **Authentication** | **Full Web Auth** (signup, login, logout, password reset, `justinas/nosurf` CSRF protection) · **JWT Token Auth** (registration, activation emails, bearer tokens) · **HTTP Basic Auth** (bcrypt hash) |
+| **Storage & Security** | Database-backed sessions (`alexedwards/scs`) · Signed and encrypted cookies (HMAC + AES-GCM) · HTTPS autocert with port 80 redirect |
+| **Observability** | Structured logging via `log/slog` (Plaintext, JSON, or Colorized dev mode) · Detailed request metrics middleware · Automatic email error notifications |
+| **Testing** | Complete handler test suites, in-memory session mocks, SQLite temp DB harness with automatic teardown |
 
-With a database selected, SQL migration helpers are available: an embedded
-migrations directory, Makefile targets backed by golang-migrate, and
-automatic migration on startup. Web apps with a database can also enable
-server-side sessions backed by alexedwards/scs.
+---
 
-Optional features: request logging (client IP, method, URL, status, body
-size), HTTP basic auth with a bcrypt-hashed password, Git integration
-(`.gitignore` plus version derived from Git metadata), and signed and
-encrypted cookie helpers.
+## Layout of Generated Codebases
 
-### Step 3 — Plus features
-
-All of Autostrada's paid tier, included free:
-
-- **Automatic HTTPS** — Let's Encrypt certificates via autocert, with
-  `--auto-https-domain/email/staging` settings, an HTTP-to-HTTPS redirect
-  server and a `certs/` cache.
-- **Custom error pages** — per-status templates in `pages/errors/`.
-- **Emails** — templates with `subject`, `plainBody` and `htmlBody`
-  blocks, sent via SMTP through `internal/mailer`.
-- **Error notifications** — runtime errors emailed to
-  `--notifications-email`; disabled unless an address is configured.
-- **Tests** — full handler test suites with standardized helpers.
-- **User accounts** — web: signup, login, logout, password reset, CSRF
-  protection; API: registration with email activation and JWT
-  authentication.
-
-### Step 4 — Generate
-
-The review screen summarizes every choice; confirming generates the
-codebase into the directory you pick (it must be empty), runs `go mod
-tidy`, and prints tailored getting-started instructions.
-
-## What a generated codebase contains
+Generated projects follow the standard Go project layout:
 
 ```
-├── assets/            Embedded static files, HTML templates, emails, migrations
-├── cmd/web|api/       main.go, server.go, routes.go, handlers.go,
-│                      helpers.go, middleware.go, errors.go (+ auth handlers, context)
-├── internal/          Emitted only when used:
-│                      database (sqlx pool + embedded migration runner), env,
-│                      version, request, response, validator, password,
-│                      mailer, cookies, log, auth, funcs
-├── go.mod             Your module path; pinned, known-good dependency versions
-├── Makefile           help · audit · test · test/cover · upgradeable · tidy ·
-│                      build · run · run/live (+ migrations/* when selected)
-└── README.md          Tailored getting-started instructions
+├── assets/                  Embedded assets: HTML templates, static files, SQL migrations, emails
+├── cmd/web|api/             Application entrypoint:
+│   ├── main.go              Startup, flags/env config, logger, pool lifecycle, DI wiring
+│   ├── server.go            HTTP server with graceful shutdown and timeouts
+│   ├── routes.go            Route declarations and middleware stack
+│   ├── handlers.go          HTTP handler methods
+│   ├── helpers.go           Template rendering or JSON encoding helpers
+│   ├── middleware.go        Panic recovery, request logging, security headers, auth guards
+│   ├── errors.go            Centralized HTTP error response helpers
+│   └── *_test.go            Standardized handler test suites
+├── internal/                Private application packages (emitted only when selected):
+│   ├── database/            sqlx connection pool and query models (users, tokens, resets)
+│   ├── env/                 Type-safe environment variable parsing with validation
+│   ├── mailer/              SMTP mail client with embedded template rendering
+│   ├── auth/                JWT tokenizer and bearer token extraction
+│   ├── cookies/             Cryptographically signed and encrypted cookie helpers
+│   ├── validator/           Input validation and field error collectors
+│   ├── response/            JSON and HTML response writers
+│   └── version/             Build and Git revision metadata helpers
+├── Makefile                 Self-documenting build, test, audit, and migration tasks
+├── go.mod                   Module path with pinned, minimal dependencies
+└── README.md                Tailored getting-started guide for the generated codebase
 ```
 
-Every generated file is gofmt-clean by construction, `go vet`-clean, and
-ships with tests when the Tests option is selected. Configuration is read
-from flags or environment variables (`--help` lists every setting), with a
-randomized default HTTP port per codebase to avoid clashes.
+---
 
-## How the tool works
+## Generated Makefile Commands
 
-Three pieces, wired in one direction:
+Every generated codebase includes a zero-dependency, self-documenting `Makefile`:
 
-```
-internal/spec        ProjectSpec (wizard answers) → validation → ResolvedSpec
-                     (view-model: dialects, drivers, random port, go.mod
-                     requirements, dependency enforcement)
-internal/generator   File-selection matrix + embedded text/template rendering;
-                     .go output is formatted with go/format; anything that
-                     fails to parse fails generation with the file named
-internal/ui          A single Bubble Tea model: one question per screen,
-                     dynamic question visibility with answer resets,
-                     dependency enforcement, review, generation, outcome
-templates/           The template library, embedded via go:embed
+```bash
+make help          # View all available targets and descriptions
+make run           # Build and run the application
+make run/live      # Run with live-reloading via air
+make test          # Run test suite with race detector
+make test/cover    # Run tests and generate HTML coverage report
+make audit         # Run tests, go mod verify, gofmt, go vet, staticcheck, govulncheck
+make tidy          # Run go mod tidy, go fix, and gofmt
+make migrations/up # Apply all database migrations (when migrations enabled)
 ```
 
-The file-selection matrix in `internal/generator/files.go` decides which
-templates are emitted for which answers. Rendered templates receive the
-`ResolvedSpec`; HTML, email and SQL templates are copied verbatim (they
-contain their own Go template syntax).
+---
 
-Question visibility and dependencies live in `internal/ui/wizard.go`:
-invisible questions have their answers reset after every commit, and
-`enforceDependencies` turns on anything a selection implies, so the review
-screen can never contradict an earlier answer.
+## Architecture of `gocraft`
 
-## Development
+`gocraft` is built with a strictly decoupled 4-layer architecture:
 
 ```
-make help          # all targets
-make audit         # tool: tests, vet, staticcheck, govulncheck
-make gate          # generate 13 representative codebases; build, vet, test each
-make matrix        # generate 29 permutations; build, vet, test, gofmt,
-                   # stray-file and comment-hygiene audit for each
+cmd/gocraft/main.go
+       │
+       ├──► Interactive TTY? ──► internal/ui (Bubble Tea TUI)
+       └──► Flags or non-TTY? ─► internal/cli (POSIX Headless Runner)
+                                        │
+                                        ▼
+                                  internal/spec
+                        (ProjectSpec ──► Validate ──► Resolve)
+                                        │
+                                        ▼
+                                internal/generator
+                        (File Matrix ──► text/template ──► go/format)
 ```
 
-The matrix is the safety net for template changes: it covers every router
-for both application types, every database dialect with and without
-migrations, both configuration sources, all log formats, feature bundles,
-and everything-on combinations. Run it before merging anything that
-touches `templates/` or `internal/generator/`.
+- **`internal/spec`**: Source of truth for validation rules, dependency cascades, dialect drivers, and view-model derivation.
+- **`internal/generator`**: File matrix mapping specs to templates. Automatically formats all Go output through `go/format` (malformed templates fail generation instantly).
+- **`internal/ui`**: Bubble Tea interactive state machine with split-pane layout, real-time cascade observer, and destructive conflict prevention.
+- **`internal/cli`**: Headless runner designed for AI agents, CI scripts, and automation with `--dry-run` and `--json`.
 
-Contributions and agents should read [AGENTS.md](AGENTS.md) — a compact
-reference covering the template conventions, invariants and verification
-loop this repository expects.
+---
+
+## Development & Verification
+
+To verify the generator and all templates:
+
+```bash
+make help          # View repository development commands
+make audit         # Audit gocraft tool: tests, vet, staticcheck, govulncheck
+make gate          # Generate 13 representative codebases and verify: build, vet, test
+make matrix        # Generate 29 permutations and run full audit:
+                   # build + vet + test + gofmt + stray-file + comment-hygiene
+```
+
+Before committing any changes to templates, run `make gate` (fast verification) or `make matrix` (exhaustive 29-codebase permutation audit).
+
+See [AGENTS.md](AGENTS.md) for architectural invariants and contributing guidelines.
+
+---
 
 ## License
 
-MIT — for both this tool and every codebase it generates.
+[MIT](LICENSE) — free for personal, commercial, and open-source use, for both this tool and every codebase it generates.
