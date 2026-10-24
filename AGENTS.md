@@ -23,15 +23,21 @@ non-empty targets.
 
 | Path | Purpose |
 |---|---|
-| `cmd/gocraft/main.go` | Tool entrypoint: flags, slog, `ui.Run` |
-| `internal/spec/spec.go` | `ProjectSpec` — every wizard answer |
+| `cmd/gocraft/main.go` | Tool entrypoint: CLI vs TUI detection, flags, slog dispatcher |
+| `internal/cli/cli.go` | Headless CLI runner: flag parsing, `--dry-run`, `--json`, validation |
+| `internal/spec/spec.go` | `ProjectSpec` — choice representation and constants |
 | `internal/spec/validate.go` | Option legality + dependency rules (source of truth) |
-| `internal/spec/resolve.go` | `ResolvedSpec` view-model, drivers, `requireVersions` pins, `BasicAuthHashedPassword` |
+| `internal/spec/resolve.go` | `ResolvedSpec` view-model, `ApplyDependencies()`, drivers, `requireVersions` pins, `BasicAuthHashedPassword` |
 | `internal/generator/generator.go` | Render + write loop; gofmt via `go/format`; `go mod tidy` |
 | `internal/generator/files.go` | **The file matrix** — every emitted file, with `Cond` and `Copy` |
-| `internal/ui/wizard.go` | Question list, visibility funcs, key handling |
-| `internal/ui/validate.go` | Text validators + `apply()` (answers → `ResolvedSpec`) |
-| `internal/ui/theme.go`, `done.go` | Wizard chrome and outcome screens |
+| `internal/ui/ui.go` | Interactive TUI entrypoint (`ui.Run`) |
+| `internal/ui/questions.go` | Question definitions, options, validators, and visibility rules |
+| `internal/ui/model.go` | Bubble Tea state machine, navigation, cascade resolution, rendering |
+| `internal/ui/values.go` | `wizardValues` state store and `toSpec()` conversion |
+| `internal/ui/theme.go` | Lipgloss styles, color palette, and layout helpers |
+| `scripts/` | Cross-platform installation scripts (`install.sh`, `install.ps1`) |
+| `.goreleaser.yaml` | Multi-platform build and archive packaging configuration |
+| `.github/workflows/` | GitHub Actions automation (`release.yml` on tag push) |
 | `templates/common/` | Root files: go.mod, Makefile, README (rendered) |
 | `templates/shared/` | Packages/assets emitted for both app types (rendered + verbatim) |
 | `templates/web/`, `templates/api/` | App-type-specific files |
@@ -67,11 +73,12 @@ non-empty targets.
 1. Generated `.go` files are always gofmt-clean and parse — enforced in
    the generator write path and audited by `make matrix`.
 2. Every option combination in the matrix produces a valid spec;
-   `apply()` runs `Validate()` before generation.
-3. Wizard: `enforceDependencies` runs after every commit (full
-   accounts ⇒ sessions+emails; jwt ⇒ emails; notifications ⇒ emails);
-   `resetInvisible` resets answers of questions the current answers
-   make invisible — a stale web-only answer can never reach an API spec.
+   `spec.Validate()` runs before generation in both UI and CLI.
+3. Wizard & CLI: Prerequisites auto-enable via cascade logic in UI and
+   `spec.ApplyDependencies()` in CLI (full accounts ⇒ sqlite+sessions+emails;
+   jwt ⇒ sqlite+emails; notifications ⇒ emails); `resetInvisible` resets
+   answers of questions current answers make invisible — a stale web-only
+   answer can never reach an API spec.
 4. Question visibility funcs depend only on other answers, never on the
    question's own value.
 5. Generated code style: Alex Edwards conventions — `run()` entrypoint,
@@ -83,14 +90,16 @@ non-empty targets.
    default is a bcrypt hash), or references to gocraft beyond the
    README attribution line.
 
-## Wizard testing pattern
+## Testing patterns
 
-No TTY needed — drive `wizardModel` headlessly with `keyRunes("2")` /
-`key(tea.KeyEnter)` (helpers in `wizard_test.go`), then inspect
-`m.v`/`m.rsp`/`m.outcome`. `conditional_test.go`'s `drive()` walks a
-full scenario from a title→answer map; add new conditional edges as
-scenarios there. After a review `enter`, feed `taskDoneMsg` manually to
-complete the flow without touching disk.
+- **TUI flow testing**: No TTY needed — drive `model` headlessly with
+  `m := newModel(mockGen, nil)` and helper `answer(m, keyRunes("2"))` /
+  `answer(m, key(tea.KeyEnter))` (helpers in `internal/ui/ui_test.go`),
+  then inspect `m.values`, `m.state`, and `m.resolvedSpec`.
+- **Headless CLI testing**: Drive runner directly via
+  `cli.Run(args, stdout, stderr, logger, mockGen)` in
+  `internal/cli/cli_test.go`. Test flags, `--dry-run`, `--json`, and
+  validation rejections.
 
 ## Known traps
 
@@ -110,9 +119,11 @@ complete the flow without touching disk.
   reads and struct fields in sync across flags/env variants of
   `cmd/*/main.go.tmpl`.
 
-## Git conventions
+## Git and release conventions
 
 Conventional commits (`feat:`, `fix:`, `style:`, `chore:`), one branch
-per unit of work (`feat/...`, `fix/...`), `--no-ff` merges to `main`,
-tags at milestones (v0.1.0, v0.2.0, v1.0.0 exist). Local only; add a
-remote when asked.
+per unit of work (`feat/...`, `fix/...`), `--no-ff` merges to `main`.
+Releases trigger automatically by pushing semver tags
+(`git tag -a v1.0.0 -m "Release v1.0.0"` and `git push origin v1.0.0`),
+which runs `.github/workflows/release.yml` with GoReleaser cross-compilation
+and publishing. Normal commits do not trigger CI runners.
