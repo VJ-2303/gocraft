@@ -41,13 +41,12 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 		{Template: "shared/internal/database/password_resets.go.tmpl", OutPath: "internal/database/password_resets.go", Cond: rsp.AccountsFull},
 		{Template: "shared/internal/database/activation_tokens.go.tmpl", OutPath: "internal/database/activation_tokens.go", Cond: rsp.AccountsJWT},
 		{Template: "shared/internal/auth/jwt.go.tmpl", OutPath: "internal/auth/jwt.go", Cond: rsp.AccountsJWT},
-		{Template: "shared/internal/request/json.go.tmpl", OutPath: "internal/request/json.go", Cond: rsp.AppType == spec.AppAPI},
 		{Template: "shared/internal/env/env.go.tmpl", OutPath: "internal/env/env.go", Cond: rsp.ConfigSource == spec.ConfigEnv},
 		{Template: "shared/internal/log/colorized.go.tmpl", OutPath: "internal/log/colorized.go", Cond: rsp.LogFormat == spec.LogColorized},
 
 		// The assets package embeds migrations (both app types) and the
 		// static files and HTML templates (web apps only).
-		{Template: "shared/assets/efs.go.tmpl", OutPath: "assets/efs.go", Cond: rsp.AppType == spec.AppWeb || rsp.Migrations},
+		{Template: "shared/assets/efs.go.tmpl", OutPath: "assets/efs.go", Cond: rsp.AppType == spec.AppWeb || rsp.Migrations || rsp.NeedsMailer},
 		{Template: "shared/assets/migrations/000001_init.up.sql", OutPath: "assets/migrations/000001_init.up.sql", Cond: rsp.Migrations, Copy: true},
 		{Template: "shared/assets/migrations/000001_init.down.sql", OutPath: "assets/migrations/000001_init.down.sql", Cond: rsp.Migrations, Copy: true},
 		{Template: "shared/assets/migrations/000002_create_sessions_table.up.sql.tmpl", OutPath: "assets/migrations/000002_create_sessions_table.up.sql", Cond: rsp.Sessions},

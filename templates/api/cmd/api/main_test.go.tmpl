@@ -20,8 +20,10 @@ import (
 
 	"{{.ModulePath}}/internal/database"
 {{- end}}
-{{- if .NeedsMailer}}
+{{- if or .NeedsMailer .Migrations}}
 	"{{.ModulePath}}/assets"
+{{- end}}
+{{- if .NeedsMailer}}
 	"{{.ModulePath}}/internal/funcs"
 	"{{.ModulePath}}/internal/mailer"
 {{- end}}
@@ -100,11 +102,13 @@ func newTestDB(t *testing.T) *sqlx.DB {
 	if err != nil {
 		t.Fatalf("opening test database: %v", err)
 	}
+{{if .Migrations}}
 
 	err = database.MigrateUp(db, assets.Migrations)
 	if err != nil {
 		t.Fatalf("running migrations: %v", err)
 	}
+{{end}}
 
 	t.Cleanup(func() {
 		db.Close()

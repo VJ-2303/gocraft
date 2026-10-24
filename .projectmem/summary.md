@@ -6,6 +6,7 @@ _Last updated: 2026-10-24_
 A terminal UI for generating production-ready Go web application and JSON API codebases — no boilerplate, no frameworks, no lock-in.
 
 ## Recent issues
+- [DONE] #0002 API with SQLite but no migrations fails test compilation because assets.Migrations is unguarded [templates/api/cmd/api/main_test.go.tmpl:104] -> Guard MigrateUp with {{if .Migrations}} and include assets import when Migrations or NeedsMailer (fixed)
 - [DONE] #0001 Duplicate mux.GET("/") route registration in httprouter.go.tmpl panics at runtime [templates/web/cmd/web/routes/httprouter.go.tmpl:56] -> Removed duplicate mux.GET("/") route registration in httprouter.go.tmpl and cleaned redundant comments across templates (fixed)
 - [DONE] #legacy_f8e1 Legacy issue: merge: close second-round parity gaps -> merge: close second-round parity gaps (fixed)
 - [DONE] #legacy_c333 Legacy issue: style: gofmt resolve.go after version pin updates -> style: gofmt resolve.go after version pin updates (fixed)

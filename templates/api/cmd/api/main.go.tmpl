@@ -35,7 +35,7 @@ import (
 	"{{.ModulePath}}/internal/mailer"
 
 {{- end}}
-{{- if .Migrations}}
+{{- if or .Migrations .NeedsMailer}}
 	"{{.ModulePath}}/assets"
 
 {{- end}}
