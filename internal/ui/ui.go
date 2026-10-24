@@ -18,12 +18,12 @@ import (
 
 // Run starts the interactive wizard. It blocks until the user completes,
 // cancels or aborts the flow, and returns any terminal error.
-func Run(ctx context.Context, logger *slog.Logger, version string) error {
+func Run(ctx context.Context, logger *slog.Logger) error {
 	generate := func(rsp spec.ResolvedSpec, target string) (generator.Result, error) {
 		return generator.Generate(rsp, absoluteTarget(target), logger, generator.Options{Tidy: true})
 	}
 
-	final, err := tea.NewProgram(newWizardModel(version, generate)).Run()
+	final, err := tea.NewProgram(newWizardModel(generate)).Run()
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/vj/nomoreboiler/internal/generator"
 	"github.com/vj/nomoreboiler/internal/spec"
@@ -97,7 +96,7 @@ func questions(v *wizardValues) []question {
 	return []question{
 		{
 			title: "Application type",
-			desc:  "Determines the structure of the generated codebase.",
+			desc:  "Determines the structure of the codebase.",
 			kind:  kindSelect,
 			str:   &v.appType,
 			options: func(*wizardValues) []option {
@@ -109,7 +108,7 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:       "Module path",
-			desc:        "The Go module path used in every import, e.g. github.com/alice/example.",
+			desc:        "Used in every import statement.",
 			kind:        kindText,
 			str:         &v.modulePath,
 			placeholder: "github.com/alice/example",
@@ -176,14 +175,14 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:   "SQL migrations",
-			desc:    "Embedded migrations directory, Makefile targets, and automatic migration on startup.",
+			desc:    "Embedded migrations with Makefile targets and auto-apply on startup.",
 			kind:    kindBool,
 			boolean: &v.migrations,
 			visible: func(v *wizardValues) bool { return v.database != string(spec.DBNone) },
 		},
 		{
 			title:   "Server-side sessions",
-			desc:    "Session data in your database via alexedwards/scs; the cookie holds only a random ID.",
+			desc:    "Stored in your database; the cookie holds only a random ID.",
 			kind:    kindBool,
 			boolean: &v.sessions,
 			visible: func(v *wizardValues) bool {
@@ -192,19 +191,19 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:   "Request logging",
-			desc:    "Log every request with the client IP, method, URL, status code and body size.",
+			desc:    "Logs client IP, method, URL, status code and body size.",
 			kind:    kindBool,
 			boolean: &v.requestLogging,
 		},
 		{
 			title:   "Basic auth",
-			desc:    "HTTP basic authentication middleware with a bcrypt-hashed password.",
+			desc:    "HTTP basic auth with a bcrypt-hashed password.",
 			kind:    kindBool,
 			boolean: &v.basicAuth,
 		},
 		{
 			title:   "Git integration",
-			desc:    "A .gitignore file and a version derived from Git metadata.",
+			desc:    "A .gitignore and a version derived from Git metadata.",
 			kind:    kindBool,
 			boolean: &v.gitIntegration,
 		},
@@ -216,7 +215,7 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:   "Automatic HTTPS",
-			desc:    "Let's Encrypt certificates with HTTP-to-HTTPS redirects in production.",
+			desc:    "Let's Encrypt certificates with HTTP→HTTPS redirects.",
 			kind:    kindBool,
 			boolean: &v.autoHTTPS,
 		},
@@ -242,7 +241,7 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:   "Tests",
-			desc:    "Full test coverage for the generated code and standardized test helpers.",
+			desc:    "Full test coverage and standardized test helpers.",
 			kind:    kindBool,
 			boolean: &v.tests,
 		},
@@ -263,7 +262,7 @@ func questions(v *wizardValues) []question {
 		},
 		{
 			title:       "Target directory",
-			desc:        "Where to generate the codebase. It must not exist yet, or must be empty.",
+			desc:        "Must not exist yet, or must be empty.",
 			kind:        kindText,
 			str:         &v.targetDir,
 			placeholder: "./my-project",
@@ -303,10 +302,9 @@ type taskDoneMsg struct {
 
 // wizardModel is the Bubble Tea model driving the whole wizard.
 type wizardModel struct {
-	version string
-	v       *wizardValues
-	qs      []question
-	idx     int // index into qs of the active question
+	v   *wizardValues
+	qs  []question
+	idx int // index into qs of the active question
 
 	cursor     int // select and bool cursor
 	input      string
@@ -325,10 +323,9 @@ type wizardModel struct {
 }
 
 // newWizardModel returns the model at the first question.
-func newWizardModel(version string, generate generateFunc) wizardModel {
+func newWizardModel(generate generateFunc) wizardModel {
 	v := newWizardValues()
 	return wizardModel{
-		version:  version,
 		v:        &v,
 		qs:       questions(&v),
 		generate: generate,
@@ -674,28 +671,21 @@ func keyNumber(key string) (int, bool) {
 	return 0, false
 }
 
-// View renders the header and the active question.
+// View renders the active question and the progress line.
 func (m wizardModel) View() string {
+	position, total := m.progress()
+
 	if m.generating {
-		position, total := m.progress()
-		return header(m.version, position, total) + "\n\n" +
+		return "  " + progress(position, total) + "\n\n" +
 			"  " + m.spinner.View() + " Generating codebase…  " +
 			hintStyle.Render("(ctrl+c to cancel)") + "\n"
 	}
 
 	q := m.current()
-	position, total := m.progress()
 
 	var b strings.Builder
-	b.WriteString(header(m.version, position, total))
-	b.WriteString("\n\n")
-	b.WriteString("  " + titleStyle.Render(q.title) + "\n")
-
-	if q.desc != "" {
-		b.WriteString(wrapText(descStyle.Render(q.desc), 62))
-		b.WriteString("\n")
-	}
-	b.WriteString("\n")
+	b.WriteString("  " + questionLine(q.title, q.desc) + "\n")
+	b.WriteString("  " + progress(position, total) + "\n\n")
 
 	switch q.kind {
 	case kindSelect:
@@ -789,33 +779,3 @@ func reviewSummary(v *wizardValues) string {
 	out.WriteString(row("Target directory", v.targetDir))
 	return out.String()
 }
-
-// wrapText hard-wraps a rendered string at approximately width columns.
-func wrapText(s string, width int) string {
-	var out []string
-	for _, line := range strings.Split(s, "\n") {
-		words := strings.Fields(line)
-		if len(words) == 0 {
-			out = append(out, line)
-			continue
-		}
-		prefix := ""
-		if strings.HasPrefix(line, "  ") {
-			prefix = "  "
-		}
-		current := words[0]
-		for _, word := range words[1:] {
-			if len(current)+1+len(word) > width {
-				out = append(out, prefix+current)
-				current = word
-				continue
-			}
-			current += " " + word
-		}
-		out = append(out, prefix+current)
-	}
-	return strings.Join(out, "\n")
-}
-
-// selectedValueStyle highlights the option the cursor rests on.
-var selectedValueStyle = lipgloss.NewStyle().Bold(true)

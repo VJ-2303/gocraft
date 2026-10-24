@@ -7,8 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Styles for the wizard. A quiet navy palette, generous whitespace, no
-// boxes or borders — the questions are the interface.
+// A quiet navy palette: the questions are the interface, everything
+// else stays out of the way.
 var (
 	primaryColor = lipgloss.Color("32")  // navy blue
 	mutedColor   = lipgloss.Color("245") // soft gray
@@ -18,13 +18,11 @@ var (
 )
 
 var (
-	brandStyle = lipgloss.NewStyle().
+	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#ffffff")).
-			Background(primaryColor).
-			Padding(0, 1)
+			Foreground(primaryColor)
 
-	versionStyle = lipgloss.NewStyle().
+	descStyle = lipgloss.NewStyle().
 			Foreground(mutedColor)
 
 	counterStyle = lipgloss.NewStyle().
@@ -35,13 +33,6 @@ var (
 
 	barTodoStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("238"))
-
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(primaryColor)
-
-	descStyle = lipgloss.NewStyle().
-			Foreground(mutedColor)
 
 	cursorStyle = lipgloss.NewStyle().
 			Foreground(accentColor)
@@ -64,13 +55,12 @@ var (
 			Foreground(lipgloss.Color("238"))
 
 	selectorMark = cursorStyle.Render("❯")
+
+	selectedValueStyle = lipgloss.NewStyle().Bold(true)
 )
 
-// header renders the brand line, the progress bar and the position
-// counter for the current question.
-func header(version string, position, total int) string {
-	brand := brandStyle.Render(" nomoreboiler ") + versionStyle.Render(" "+version)
-
+// progress renders the progress bar and the n/total counter.
+func progress(position, total int) string {
 	segments := total
 	if segments > 24 {
 		segments = 24
@@ -82,9 +72,17 @@ func header(version string, position, total int) string {
 	bar := barDoneStyle.Render(strings.Repeat("▰", done)) +
 		barTodoStyle.Render(strings.Repeat("▱", segments-done))
 
-	counter := counterStyle.Render(fmt.Sprintf("%d/%d", position, total))
+	return bar + " " + counterStyle.Render(fmt.Sprintf("%d/%d", position, total))
+}
 
-	return brand + "\n" + bar + " " + counter
+// questionLine renders the question title and its description on one
+// compact line.
+func questionLine(title, desc string) string {
+	line := titleStyle.Render(title)
+	if desc != "" {
+		line += " " + descStyle.Render("— "+desc)
+	}
+	return line
 }
 
 // help renders the footer hint line for a question.

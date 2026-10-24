@@ -48,7 +48,7 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	return ui.Run(ctx, logger, version)
+	return ui.Run(ctx, logger)
 }
 
 // config holds the configuration settings for the application.

@@ -41,7 +41,7 @@ func TestWizardAPIFlowDoesNotAskWebQuestions(t *testing.T) {
 		return generator.Result{Dir: target}, nil
 	}
 
-	m := newWizardModel("test", generate)
+	m := newWizardModel( generate)
 
 	// Application type: JSON API.
 	m, _ = answer(m, keyRunes("2"))
@@ -124,7 +124,7 @@ func TestWizardAPIFlowDoesNotAskWebQuestions(t *testing.T) {
 // TestBackNavigationResetsHiddenAnswers ensures that changing an earlier
 // answer resets the answers of questions it makes invisible.
 func TestBackNavigationResetsHiddenAnswers(t *testing.T) {
-	m := newWizardModel("test", nil)
+	m := newWizardModel( nil)
 
 	// Walk to the custom error pages question as a web app and answer yes.
 	m.idx = indexOfQuestion(m.qs, "Custom error pages")
