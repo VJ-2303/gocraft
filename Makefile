@@ -65,12 +65,19 @@ gate:
 
 .PHONY: help audit test test/cover upgradeable tidy build run run/live gate matrix
 
-## matrix: Generate the full permutation matrix to /tmp/nmb-matrix and build, vet and test every codebase.
+## matrix: Generate the full permutation matrix to /tmp/nmb-matrix and audit every codebase: formatting, build, vet, tests, stray files and comment hygiene.
 matrix:
 	@rm -rf /tmp/nmb-matrix
 	@NMB_MATRIX_DIR=/tmp/nmb-matrix go test -count=1 -run TestMatrixGenerate ./internal/generator/
 	@set -e; for dir in /tmp/nmb-matrix/*/; do \
-		echo "== verifying $$(basename $$dir) =="; \
+		name=$$(basename $$dir); \
+		echo "== auditing $$name =="; \
 		(cd $$dir && go build ./... && go vet ./... && go test ./...); \
+		fmt=$$(cd $$dir && gofmt -l .); \
+		if [ -n "$$fmt" ]; then echo "not gofmt-clean: $$name: $$fmt"; exit 1; fi; \
+		strays=$$(find $$dir -name "*.sqlite" -o -name "*.log" -o -name ".air.toml" -o -name "tmp" -o -name "nohup.out" -o -name ".DS_Store" | grep -v certManager || true); \
+		if [ -n "$$strays" ]; then echo "stray files: $$strays"; exit 1; fi; \
+		junk=$$(grep -rn "TODO\|FIXME\|XXX\|goes here" $$dir --include="*.go" || true); \
+		if [ -n "$$junk" ]; then echo "comment hygiene: $$junk"; exit 1; fi; \
 	done; \
-	echo "matrix: all generated codebases build, vet and test cleanly"
+	echo "matrix: all generated codebases are gofmt-clean, build, vet, test cleanly and pass the file and comment audit"

@@ -4,6 +4,7 @@ package generator
 
 import (
 	"fmt"
+	"go/format"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -84,6 +85,18 @@ func Generate(rsp spec.ResolvedSpec, targetDir string, logger *slog.Logger, opts
 		}
 
 		dest := filepath.Join(targetDir, out)
+		// Go source files are formatted with gofmt before writing, so
+		// generated codebases are always gofmt-clean. A file that does
+		// not parse is a template bug and fails generation with the
+		// offending file named.
+		if strings.HasSuffix(out, ".go") {
+			formatted, err := format.Source(content)
+			if err != nil {
+				return result, fmt.Errorf("%s does not compile as Go source: %w", out, err)
+			}
+			content = formatted
+		}
+
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return result, fmt.Errorf("creating directory for %s: %w", out, err)
 		}
