@@ -42,7 +42,6 @@ func (app *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	v.CheckField(validator.MaxChars(input.Password, 72), "password", "must not be more than 72 characters")
 	v.CheckField(!password.Common(input.Password), "password", "must not be a common password")
 
-	// Reject email addresses that already have an account.
 	_, found, err := app.users.GetByEmail(input.Email)
 	if err != nil {
 		app.serverError(w, r, err)

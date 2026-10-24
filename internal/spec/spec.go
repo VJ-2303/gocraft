@@ -128,16 +128,3 @@ type ProjectSpec struct {
 	// Tokens. JSON APIs only; requires a database and emails.
 	AccountsJWT bool
 }
-
-// Defaults returns a ProjectSpec populated with the wizard's default
-// selections.
-func Defaults() ProjectSpec {
-	return ProjectSpec{
-		AppType:      AppWeb,
-		Database:     DBNone,
-		Migrations:   false,
-		Router:       RouterServeMux,
-		ConfigSource: ConfigFlags,
-		LogFormat:    LogPlaintext,
-	}
-}

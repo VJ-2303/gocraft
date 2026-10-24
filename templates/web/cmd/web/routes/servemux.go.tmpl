@@ -11,20 +11,16 @@ import (
 func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 
-	// Serve static files from the embedded assets.
 	mux.Handle("GET /static/", http.FileServerFS(app.static))
 
-	// Application routes.
 	mux.HandleFunc("GET /{$}", app.home)
 {{if .BasicAuth}}
 	mux.HandleFunc("GET /restricted-basic-auth", app.restrictedBasicAuth)
 {{end}}
 
-	// Any other path is not found.
 	mux.HandleFunc("/", app.notFound)
 {{if .AccountsFull}}
 
-	// User account routes.
 	mux.HandleFunc("GET /restricted", app.requireAuthentication(app.restricted))
 	mux.HandleFunc("GET /signup", app.requireAnonymous(app.signup))
 	mux.HandleFunc("POST /signup", app.requireAnonymous(app.signupSubmit))
@@ -38,7 +34,6 @@ func (app *application) routes() http.Handler {
 	mux.HandleFunc("POST /password-reset/{token}", app.requireAnonymous(app.passwordResetSubmit))
 	mux.HandleFunc("GET /password-reset-confirmation", app.requireAnonymous(app.passwordResetConfirmation))
 {{end}}
-	// Apply the middleware chain, from the outside in.
 	var handler http.Handler = mux
 {{- if .AccountsFull}}
 	handler = app.authenticate(handler)
