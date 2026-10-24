@@ -23,6 +23,17 @@ type UserModel struct {
 // Insert creates a new user with the given email and hashed password,
 // returning the new user's ID.
 func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
+{{- if eq .Dialect "postgres"}}
+	query := "INSERT INTO users (created, email, hashed_password, activated) VALUES ($1, $2, $3, false) RETURNING id"
+
+	var id int64
+	err := m.DB.QueryRow(query, time.Now().UTC(), email, hashedPassword).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+{{- else}}
 	query := m.DB.Rebind("INSERT INTO users (created, email, hashed_password, activated) VALUES (?, ?, ?, false)")
 
 	result, err := m.DB.Exec(query, time.Now().UTC(), email, hashedPassword)
@@ -36,6 +47,7 @@ func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
 	}
 
 	return id, nil
+{{- end}}
 }
 
 // SetActivated marks the user's account as activated (or deactivated).
