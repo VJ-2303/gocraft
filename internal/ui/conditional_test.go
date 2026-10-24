@@ -27,7 +27,7 @@ type scenario struct {
 func drive(t *testing.T, s scenario) (wizardModel, []string) {
 	t.Helper()
 
-	m := newWizardModel( func(rsp spec.ResolvedSpec, target string) (generator.Result, error) {
+	m := newWizardModel(func(rsp spec.ResolvedSpec, target string) (generator.Result, error) {
 		return generator.Result{Dir: target}, nil
 	})
 	answers := func(title string) string {
@@ -300,7 +300,7 @@ func TestConditionalBackNavigationChangesVisibility(t *testing.T) {
 	// custom error pages answer and never ask for it again.
 	v.appType = "api"
 
-	m := newWizardModel( nil)
+	m := newWizardModel(nil)
 	m.v = &v
 	m.qs = questions(&v)
 
@@ -324,7 +324,7 @@ func TestConditionalBackNavigationChangesVisibility(t *testing.T) {
 
 // TestCancelDuringGeneration exercises ctrl+c while generating.
 func TestCancelDuringGeneration(t *testing.T) {
-	m := newWizardModel( func(rsp spec.ResolvedSpec, target string) (generator.Result, error) {
+	m := newWizardModel(func(rsp spec.ResolvedSpec, target string) (generator.Result, error) {
 		return generator.Result{Dir: target}, nil
 	})
 
