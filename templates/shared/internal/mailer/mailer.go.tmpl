@@ -8,7 +8,6 @@ import (
 	"html/template"
 	"log/slog"
 	"io/fs"
-	"strings"
 	"time"
 
 	"github.com/wneessen/go-mail"
@@ -37,7 +36,9 @@ func New(logger *slog.Logger, emailFiles fs.FS, funcs template.FuncMap, host str
 	}
 
 	for _, page := range pages {
-		name := strings.TrimSuffix(page, ".tmpl")
+		// Callers pass the file name with extension (e.g.
+		// "example.tmpl"), so the cache is keyed by file name.
+		name := page
 
 		tmpl, err := template.New(name).Funcs(funcs).ParseFS(emailFiles, page)
 		if err != nil {

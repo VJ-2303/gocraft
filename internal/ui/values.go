@@ -84,17 +84,20 @@ func (v *wizardValues) applyCascade(id string, val any) {
 		if s, ok := val.(string); ok && s == "full" {
 			v.sessions = true
 			v.emails = true
+			v.migrations = true
 			if v.database == string(spec.DBNone) {
 				v.database = string(spec.DBSQLite)
 			}
 		} else if ok && s == "jwt" {
 			v.emails = true
+			v.migrations = true
 			if v.database == string(spec.DBNone) {
 				v.database = string(spec.DBSQLite)
 			}
 		}
 	case "sessions":
 		if b, ok := val.(bool); ok && b {
+			v.migrations = true
 			if v.database == string(spec.DBNone) {
 				v.database = string(spec.DBSQLite)
 			}
@@ -127,6 +130,9 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 			if !v.emails {
 				needs = append(needs, "Emails")
 			}
+			if !v.migrations {
+				needs = append(needs, "Migrations")
+			}
 			if len(needs) > 0 {
 				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
 			}
@@ -138,13 +144,25 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 			if !v.emails {
 				needs = append(needs, "Emails")
 			}
+			if !v.migrations {
+				needs = append(needs, "Migrations")
+			}
 			if len(needs) > 0 {
 				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
 			}
 		}
 	case "sessions":
-		if optionValue == "true" && v.database == string(spec.DBNone) {
-			return "+auto-enables SQLite"
+		if optionValue == "true" {
+			var needs []string
+			if v.database == string(spec.DBNone) {
+				needs = append(needs, "SQLite")
+			}
+			if !v.migrations {
+				needs = append(needs, "Migrations")
+			}
+			if len(needs) > 0 {
+				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
+			}
 		}
 	case "migrations":
 		if optionValue == "true" && v.database == string(spec.DBNone) {

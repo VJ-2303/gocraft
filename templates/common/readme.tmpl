@@ -48,7 +48,11 @@ version=N`, `make migrations/force version=N`, `make migrations/version`, and
 `make migrations/new name=add_example_table` to create a new migration pair.
 
 The database DSN defaults to `{{.Driver.ExampleDSN}}`; override it with the
-`DB_DSN` make variable or the `--db-dsn` flag.
+{{- if eq .ConfigSource "flags"}}
+`--db-dsn` flag or the `DB_DSN` make variable.
+{{- else}}
+`DB_DSN` environment variable or the `DB_DSN` make variable.
+{{- end}}
 {{- end}}
 
 ## Admin commands

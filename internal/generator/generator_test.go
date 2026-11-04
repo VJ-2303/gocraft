@@ -761,7 +761,6 @@ func TestGenerateSessionsAndCookies(t *testing.T) {
 		"sessionManager.Store = sqlite3store.New(db.DB)",
 		"sessionManager.Cookie.Secure = true",
 		`"session-cookie-name"`,
-		`"cookie-secret-key"`,
 	} {
 		if !strings.Contains(string(main), want) {
 			t.Errorf("cmd/web/main.go want substring %q", want)
@@ -991,6 +990,18 @@ func matrixSpecs() map[string]spec.ProjectSpec {
 		s.CustomErrorPages = true
 		s.Emails = true
 		s.ErrorNotifications = true
+	})
+
+	// Edge combination: AutoHTTPS and nothing else. This shape once produced
+	// a generated API that did not compile.
+	add("web-auto-https-only", func(s *spec.ProjectSpec) { s.AutoHTTPS = true })
+	add("api-auto-https-only", func(s *spec.ProjectSpec) { s.AutoHTTPS = true })
+
+	// Emails without a database or migrations. This shape once produced a
+	// mailer whose embedded template cache was empty.
+	add("api-emails-only", func(s *spec.ProjectSpec) {
+		s.Emails = true
+		s.Tests = true
 	})
 
 	// Everything on, both app types.

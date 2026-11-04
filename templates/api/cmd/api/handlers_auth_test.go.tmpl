@@ -126,3 +126,16 @@ func sha256Sum(s string) []byte {
 	sum := sha256.Sum256([]byte(s))
 	return sum[:]
 }
+
+func TestAuthenticationTokenUnknownEmail(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app)
+
+	status, _, body := ts.postJSON(t, "/v1/tokens/authentication", `{"email":"nobody@example.com","password":"supersecret1"}`)
+	if status != http.StatusUnauthorized {
+		t.Errorf("want status %d for an unknown email, got %d", http.StatusUnauthorized, status)
+	}
+	if strings.Contains(body, "nobody@example.com") {
+		t.Errorf("want a response that does not echo the email, got %q", body)
+	}
+}

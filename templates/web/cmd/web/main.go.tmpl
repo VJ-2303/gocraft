@@ -85,9 +85,6 @@ func run() error {
 {{- if .Sessions}}
 	flag.StringVar(&cfg.sessionCookieName, "session-cookie-name", "{{.SessionCookieName}}", "name of the session cookie")
 {{- end}}
-{{- if .SecureCookies}}
-	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "32-character secret key for cookie signing and encryption")
-{{- end}}
 {{- if .NeedsMailer}}
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "localhost", "SMTP server host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP server port")
@@ -131,11 +128,6 @@ func run() error {
 {{- if .Sessions}}
 		sessionCookieName: env.GetString("SESSION_COOKIE_NAME", "{{.SessionCookieName}}"),
 {{- end}}
-{{- if .SecureCookies}}
-		cookie: cookieConfig{
-			secretKey: env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
-		},
-{{- end}}
 {{- if .NeedsMailer}}
 		smtp: smtpConfig{
 			host:     env.GetString("SMTP_HOST", "localhost"),
@@ -178,7 +170,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	logger.Info("database connection pool established", "dsn", cfg.db.dsn)
+	logger.Info("database connection pool established")
 {{- if .Migrations}}
 	if cfg.db.automigrate {
 		if err := database.MigrateUp(db, assets.Migrations); err != nil {
@@ -286,9 +278,6 @@ type config struct {
 {{- if .BasicAuth}}
 	basicAuth basicAuthConfig
 {{- end}}
-{{- if .SecureCookies}}
-	cookie cookieConfig
-{{- end}}
 {{- if .NeedsMailer}}
 	smtp smtpConfig
 {{- end}}
@@ -324,14 +313,6 @@ type dbConfig struct {
 type basicAuthConfig struct {
 	username       string
 	hashedPassword string
-}
-{{- end}}
-{{- if .SecureCookies}}
-
-// cookieConfig holds the secret key used for cookie signing and
-// encryption.
-type cookieConfig struct {
-	secretKey string
 }
 {{- end}}
 {{- if .NeedsMailer}}

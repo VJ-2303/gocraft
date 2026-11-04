@@ -441,6 +441,7 @@ func TestResolve(t *testing.T) {
 		s.Emails = true
 		s.AccountsJWT = true
 		s.AutoHTTPS = true
+		s.Migrations = true
 
 		r, err := Resolve(s)
 		if err != nil {

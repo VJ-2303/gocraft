@@ -5,11 +5,13 @@ package main
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"{{.ModulePath}}/internal/database"
 	"{{.ModulePath}}/internal/password"
 	"{{.ModulePath}}/internal/request"
 	"{{.ModulePath}}/internal/response"
@@ -63,6 +65,13 @@ func (app *application) registerUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id, err := app.users.Insert(input.Email, hashedPassword)
+	if errors.Is(err, database.ErrDuplicateEmail) {
+		// The pre-check above races with a concurrent registration; the
+		// unique index in the database is the source of truth.
+		v.AddFieldError("email", "already in use")
+		app.failedValidation(w, r, v)
+		return
+	}
 	if err != nil {
 		app.serverError(w, r, err)
 		return
@@ -184,7 +193,14 @@ func (app *application) createAuthenticationToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	matches, err := password.Matches(input.Password, user.HashedPassword)
+	// Compare against a dummy hash when the email is unknown, so the
+	// response time does not reveal whether the account exists.
+	hashedPassword := password.DummyHash
+	if found {
+		hashedPassword = user.HashedPassword
+	}
+
+	matches, err := password.Matches(input.Password, hashedPassword)
 	if err != nil {
 		app.serverError(w, r, err)
 		return

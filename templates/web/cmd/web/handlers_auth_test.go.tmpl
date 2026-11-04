@@ -183,3 +183,27 @@ func TestLoginWrongPassword(t *testing.T) {
 		t.Errorf("want the generic error message, got %q", body)
 	}
 }
+
+func TestLoginUnknownEmail(t *testing.T) {
+	app := newTestApplication(t)
+	ts := newTestServer(t, app) // no account created
+
+	_, _, loginPage := ts.get(t, "/login")
+	match := csrfTokenRX.FindStringSubmatch(loginPage)
+	if match == nil {
+		t.Fatal("no CSRF token found in the login form")
+	}
+
+	form := url.Values{}
+	form.Set("email", "nobody@example.com")
+	form.Set("password", "supersecret1")
+	form.Set("csrf_token", match[1])
+
+	status, _, body := ts.postForm(t, "/login", form)
+	if status != http.StatusUnprocessableEntity {
+		t.Errorf("want status %d for an unknown email, got %d", http.StatusUnprocessableEntity, status)
+	}
+	if !contains(body, "Email or password is incorrect") {
+		t.Errorf("want the generic error message, got %q", body)
+	}
+}

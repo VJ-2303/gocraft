@@ -15,6 +15,8 @@ func (app *application) routes() http.Handler {
 	mux.GET("/v1/healthcheck", func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 		app.healthcheck(w, r)
 	})
+	mux.NotFound = http.HandlerFunc(app.notFound)
+	mux.MethodNotAllowed = http.HandlerFunc(app.methodNotAllowed)
 
 {{- if .AccountsJWT}}
 

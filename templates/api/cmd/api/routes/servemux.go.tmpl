@@ -11,6 +11,7 @@ func (app *application) routes() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /v1/healthcheck", app.healthcheck)
+	mux.HandleFunc("/", app.notFound)
 
 {{- if .AccountsJWT}}
 

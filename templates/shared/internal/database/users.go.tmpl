@@ -1,10 +1,39 @@
 package database
 
 import (
+	"errors"
 	"time"
 
 	"github.com/jmoiron/sqlx"
+{{- if eq .Dialect "postgres"}}
+	"github.com/jackc/pgx/v5/pgconn"
+{{- else if eq .Dialect "mysql"}}
+	"github.com/go-sql-driver/mysql"
+{{- else if eq .Dialect "sqlite"}}
+	"modernc.org/sqlite"
+{{- end}}
 )
+
+// ErrDuplicateEmail is returned by Insert when the email address is
+// already registered. Callers map it to a 422 response rather than a
+// 500.
+var ErrDuplicateEmail = errors.New("duplicate email")
+
+// isUniqueViolation reports whether the error is a unique-constraint
+// violation from the underlying driver.
+func isUniqueViolation(err error) bool {
+{{- if eq .Dialect "postgres"}}
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+{{- else if eq .Dialect "mysql"}}
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == 1062
+{{- else}}
+	var sqliteErr *sqlite.Error
+	// 1555 is SQLITE_CONSTRAINT_PRIMARYKEY, 2067 is SQLITE_CONSTRAINT_UNIQUE.
+	return errors.As(err, &sqliteErr) && (sqliteErr.Code() == 1555 || sqliteErr.Code() == 2067)
+{{- end}}
+}
 
 // User represents a user account stored in the users table.
 type User struct {
@@ -29,6 +58,9 @@ func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
 	var id int64
 	err := m.DB.QueryRow(query, time.Now().UTC(), email, hashedPassword).Scan(&id)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, ErrDuplicateEmail
+		}
 		return 0, err
 	}
 
@@ -38,6 +70,9 @@ func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
 
 	result, err := m.DB.Exec(query, time.Now().UTC(), email, hashedPassword)
 	if err != nil {
+		if isUniqueViolation(err) {
+			return 0, ErrDuplicateEmail
+		}
 		return 0, err
 	}
 
@@ -50,6 +85,7 @@ func (m UserModel) Insert(email string, hashedPassword []byte) (int64, error) {
 {{- end}}
 }
 
+{{- if .AccountsJWT}}
 // SetActivated marks the user's account as activated (or deactivated).
 // Accounts activate through the emailed activation token flow.
 func (m UserModel) SetActivated(id int64, activated bool) error {
@@ -58,6 +94,7 @@ func (m UserModel) SetActivated(id int64, activated bool) error {
 	_, err := m.DB.Exec(query, activated, id)
 	return err
 }
+{{- end}}
 
 // Get fetches a single user by ID. The second return value reports
 // whether a matching user was found.

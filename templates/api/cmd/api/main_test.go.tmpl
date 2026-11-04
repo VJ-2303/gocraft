@@ -2,14 +2,18 @@
 package main
 
 import (
+{{- if .NeedsDB}}
 	"context"
+{{- end}}
 	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+{{- if .NeedsDB}}
 	"os"
+{{- end}}
 	"strings"
 	"testing"
 {{- if .AccountsJWT}}

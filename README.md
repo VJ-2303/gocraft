@@ -147,7 +147,7 @@ Use `--dry-run` to preview the file tree without writing anything. Use `--json` 
 | `--request-logging` | `false` | Log every request with method, path, and latency |
 | `--basic-auth` | `false` | HTTP Basic Auth with bcrypt-hashed passwords |
 | `--git-integration` | `true` | `.gitignore` and build version metadata |
-| `--secure-cookies` | `false` | HMAC-signed and AES-encrypted cookies |
+| `--secure-cookies` | `false` | HMAC-signed and AES-encrypted cookie helpers in `internal/cookies` |
 | `--auto-https` | `false` | Automatic Let's Encrypt TLS |
 | `--custom-error-pages` | `false` | Styled 400/401/404/500 pages (web only) |
 | `--emails` | `false` | SMTP mailer and multipart email templates |

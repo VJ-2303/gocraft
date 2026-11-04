@@ -10,7 +10,7 @@ without breaking invariants. No section repeats the README.
 go test ./...     # fast; unit + headless wizard flow tests
 make audit        # tests + vet + staticcheck + govulncheck (tool itself)
 make gate         # 13 representative codebases: build + vet + test
-make matrix       # 29 permutations: build + vet + test + gofmt + stray-file
+make matrix       # 32 permutations: build + vet + test + gofmt + stray-file
                   # + comment-hygiene audit — REQUIRED for template changes
 ```
 

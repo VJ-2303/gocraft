@@ -49,6 +49,12 @@ func (s ProjectSpec) Validate() error {
 		errs = append(errs, fmt.Errorf("module path %q is not a valid Go module path: %w", s.ModulePath, err))
 	}
 
+	// Server-side sessions and user accounts need their tables, and the
+	// SQL migrations are the only way to create those tables.
+	if (s.Sessions || s.AccountsFull || s.AccountsJWT) && !s.Migrations {
+		errs = append(errs, fmt.Errorf("server-side sessions and user accounts require sql migrations"))
+	}
+
 	// SQL migrations only make sense with a database selected.
 	if s.Migrations && s.Database == DBNone {
 		errs = append(errs, fmt.Errorf("sql migrations require a database"))
