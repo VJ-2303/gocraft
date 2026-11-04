@@ -77,9 +77,6 @@ func run() error {
 	flag.StringVar(&cfg.basicAuth.username, "basic-auth-username", "admin", "basic auth username")
 	flag.StringVar(&cfg.basicAuth.hashedPassword, "basic-auth-hashed-password", "{{.BasicAuthHashedPassword}}", "basic auth bcrypt-hashed password")
 {{- end}}
-{{- if .SecureCookies}}
-	flag.StringVar(&cfg.cookie.secretKey, "cookie-secret-key", "{{.CookieSecretKey}}", "32-character secret key for cookie signing and encryption")
-{{- end}}
 {{- if .NeedsMailer}}
 	flag.StringVar(&cfg.smtp.host, "smtp-host", "localhost", "SMTP server host")
 	flag.IntVar(&cfg.smtp.port, "smtp-port", 25, "SMTP server port")
@@ -96,7 +93,7 @@ func run() error {
 	flag.BoolVar(&cfg.autoHTTPS.staging, "auto-https-staging", false, "use the Let's Encrypt staging environment")
 {{- end}}
 {{- if .AccountsJWT}}
-	flag.StringVar(&cfg.jwt.secret, "jwt-secret", "{{.CookieSecretKey}}", "32-character secret key for signing authentication tokens")
+	flag.StringVar(&cfg.jwt.secret, "jwt-secret", "{{.JWTSecretKey}}", "32-character secret key for signing authentication tokens")
 {{- end}}
 	flag.Parse()
 {{- else}}
@@ -123,11 +120,6 @@ func run() error {
 			hashedPassword: env.GetString("BASIC_AUTH_HASHED_PASSWORD", "{{.BasicAuthHashedPassword}}"),
 		},
 {{- end}}
-{{- if .SecureCookies}}
-		cookie: cookieConfig{
-			secretKey: env.GetString("COOKIE_SECRET_KEY", "{{.CookieSecretKey}}"),
-		},
-{{- end}}
 {{- if .NeedsMailer}}
 		smtp: smtpConfig{
 			host:     env.GetString("SMTP_HOST", "localhost"),
@@ -151,13 +143,15 @@ func run() error {
 {{- end}}
 {{- if .AccountsJWT}}
 		jwt: jwtConfig{
-			secret: env.GetString("JWT_SECRET", "{{.CookieSecretKey}}"),
+			secret: env.GetString("JWT_SECRET", "{{.JWTSecretKey}}"),
 		},
 {{- end}}
 	}
 {{- end}}
 
 	logger := newLogger()
+
+	var err error
 
 {{- if .NeedsDB}}
 	ctx, cancel := context.WithTimeout(context.Background(), database.DefaultTimeout)
@@ -175,7 +169,7 @@ func run() error {
 	}
 	defer db.Close()
 
-	logger.Info("database connection pool established", "dsn", cfg.db.dsn)
+	logger.Info("database connection pool established")
 {{- if .Migrations}}
 	if cfg.db.automigrate {
 		if err := database.MigrateUp(db, assets.Migrations); err != nil {
@@ -238,11 +232,7 @@ func run() error {
 		err = srv.ListenAndServe()
 	}
 {{- else}}
-{{- if or .NeedsDB .NeedsMailer .AccountsJWT}}
 	err = srv.ListenAndServe()
-{{- else}}
-	err := srv.ListenAndServe()
-{{- end}}
 {{- end}}
 	if !errors.Is(err, http.ErrServerClosed) {
 		return err
@@ -267,9 +257,6 @@ type config struct {
 {{- end}}
 {{- if .BasicAuth}}
 	basicAuth basicAuthConfig
-{{- end}}
-{{- if .SecureCookies}}
-	cookie cookieConfig
 {{- end}}
 {{- if .NeedsMailer}}
 	smtp smtpConfig
@@ -306,14 +293,6 @@ type dbConfig struct {
 type basicAuthConfig struct {
 	username       string
 	hashedPassword string
-}
-{{- end}}
-{{- if .SecureCookies}}
-
-// cookieConfig holds the secret key used for cookie signing and
-// encryption.
-type cookieConfig struct {
-	secretKey string
 }
 {{- end}}
 {{- if .NeedsMailer}}

@@ -88,15 +88,15 @@ func MigrateUp(db *sqlx.DB, migrationsFS fs.FS) error {
 		return cmp.Compare(a.version, b.version)
 	})
 
-	// Read the current migration version, if any. On a fresh database the
-	// schema_migrations table does not exist yet, so create it.
+	// Ensure the schema_migrations table exists, then read the current
+	// version (0 for a fresh database). A failure here is a real error;
+	// do not proceed with a guessed version.
+	if _, err := db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (version bigint not null primary key, dirty boolean not null)"); err != nil {
+		return fmt.Errorf("creating schema_migrations table: %w", err)
+	}
 	var current int64
-	err = db.Get(&current, "SELECT max(version) FROM schema_migrations")
-	if err != nil {
-		_, err = db.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (version bigint not null primary key, dirty boolean not null)")
-		if err != nil {
-			return fmt.Errorf("creating schema_migrations table: %w", err)
-		}
+	if err := db.Get(&current, "SELECT COALESCE(max(version), 0) FROM schema_migrations"); err != nil {
+		return fmt.Errorf("reading current migration version: %w", err)
 	}
 
 	for _, m := range pending {

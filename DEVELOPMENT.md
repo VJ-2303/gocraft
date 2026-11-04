@@ -82,13 +82,13 @@ make audit
 # Generate 13 representative codebases and verify: build, vet, test
 make gate
 
-# Generate 29 permutations and run full audit:
+# Generate 32 permutations and run full audit:
 # build + vet + test + gofmt + stray-file + comment-hygiene audit
 make matrix
 ```
 
 > [!TIP]
-> `make gate` is the recommended fast verification loop for local iteration. `make matrix` runs exhaustive 29-combination audits and is required when editing template files.
+> `make gate` is the recommended fast verification loop for local iteration. `make matrix` runs exhaustive 32-combination audits and is required when editing template files.
 
 If `make gate` or `make matrix` fails with "target directory is not empty" after an interrupted run, clean the temporary directories first:
 

@@ -1,6 +1,7 @@
 module github.com/VJ-2303/gocraft
 
 go 1.27
+toolchain go1.27.3
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

@@ -52,7 +52,7 @@ gate: ## Generate and verify 13 representative codebases
 	done; \
 	echo "gate: all generated codebases build, vet and test cleanly"
 
-matrix: ## Generate and audit 29 permutation codebases
+matrix: ## Generate and audit 32 permutation codebases
 	@rm -rf /tmp/gocraft-matrix
 	@GOCRAFT_MATRIX_DIR=/tmp/gocraft-matrix go test -count=1 -run TestMatrixGenerate ./internal/generator/
 	@set -e; for dir in /tmp/gocraft-matrix/*/; do \

@@ -15,6 +15,11 @@ import (
 // caps passwords at that length.
 const cost = 12
 
+// DummyHash is the bcrypt hash of a random 32-byte value. Login
+// handlers compare against it when an email address is unknown, so the
+// response time does not reveal whether the account exists.
+var DummyHash = []byte("$2a$12$csdd4jOfhxOnDDAULRVpj.sIo8bQk5h1aPHrVc2jlav78WtH62Y7i")
+
 // Hash returns the bcrypt hash of the plaintext password.
 func Hash(plaintext string) ([]byte, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(plaintext), cost)

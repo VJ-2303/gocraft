@@ -1,0 +1,47 @@
+package mailer_test
+
+import (
+	"io"
+	"io/fs"
+	"log/slog"
+	"strings"
+	"testing"
+
+	"{{.ModulePath}}/assets"
+	"{{.ModulePath}}/internal/funcs"
+	"{{.ModulePath}}/internal/mailer"
+)
+
+// TestMailerTemplatesAreCached guards the mailer template cache: every
+// email template embedded in assets must be retrievable by the exact
+// file name that callers pass to Send. A name that misses the cache
+// fails every send with an "is not in the mailer cache" error.
+func TestMailerTemplatesAreCached(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+	// Port 1 (tcpmux) is reserved and locally closed, so the SMTP dial
+	// fails fast without touching the network; delivery itself is not
+	// exercised. Port numbers below 1 are rejected by the mail client.
+	m, err := mailer.New(logger, assets.EmailFiles, funcs.All(), "localhost", 1, "", "", "Gocraft <no-reply@example.com>")
+	if err != nil {
+		t.Fatalf("new mailer: %v", err)
+	}
+
+	// The embedded email files are rooted at the emails directory.
+	paths, err := fs.Glob(assets.EmailFiles, "*.tmpl")
+	if err != nil {
+		t.Fatalf("globbing email templates: %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no email templates found in assets")
+	}
+
+	for _, path := range paths {
+		// The assertion only requires that the cache lookup succeeds for
+		// every embedded template; delivery errors are expected.
+		err := m.Send("test@example.com", map[string]any{}, path)
+		if err != nil && strings.Contains(err.Error(), "is not in the mailer cache") {
+			t.Errorf("template %s is not reachable by Send: %v", path, err)
+		}
+	}
+}

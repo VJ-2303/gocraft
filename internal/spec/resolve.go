@@ -1,8 +1,10 @@
 package spec
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
-	"math/rand/v2"
+	mathrand "math/rand/v2"
 	"path"
 	"strings"
 )
@@ -70,10 +72,10 @@ type ResolvedSpec struct {
 	// out-of-the-box local testing.
 	BasicAuthHashedPassword string
 
-	// CookieSecretKey is a random 32-character string used by the secure
-	// cookies helpers, generated per codebase for development. Documented
-	// for replacement in production.
-	CookieSecretKey string
+	// JWTSecretKey is a random 32-character hex string used as the default
+	// development JWT signing secret for the API accounts (JWT) option.
+	// Documented for replacement in production.
+	JWTSecretKey string
 
 	// Requires lists the module requirements (path + version) implied by
 	// the selected options, for go.mod.
@@ -108,6 +110,12 @@ func (s *ProjectSpec) ApplyDependencies() {
 	if (s.Sessions || s.AccountsJWT) && s.Database == DBNone {
 		s.Database = DBSQLite
 	}
+
+	// Sessions and user accounts need their tables, and the only way
+	// to create those in a generated codebase is the SQL migrations.
+	if s.Sessions || s.AccountsFull || s.AccountsJWT {
+		s.Migrations = true
+	}
 }
 
 // Resolve validates the spec and computes the derived view-model fields.
@@ -125,10 +133,10 @@ func Resolve(s ProjectSpec) (ResolvedSpec, error) {
 		NeedsSessionStore:       s.Sessions,
 		HasAuth:                 s.AccountsFull || s.AccountsJWT,
 		NeedsMailer:             s.Emails || s.ErrorNotifications || s.AccountsFull || s.AccountsJWT,
-		Port:                    1000 + rand.IntN(9000),
+		Port:                    1000 + mathrand.IntN(9000),
 		SessionCookieName:       "session_" + randomSuffix(8),
 		BasicAuthHashedPassword: BasicAuthHashedPassword,
-		CookieSecretKey:         randomKey(),
+		JWTSecretKey:            randomKey(),
 	}
 
 	r.NeedsDB = r.UseDB || s.Sessions || s.AccountsFull || s.AccountsJWT
@@ -173,15 +181,20 @@ func randomSuffix(n int) string {
 	const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = alphabet[rand.IntN(len(alphabet))]
+		b[i] = alphabet[mathrand.IntN(len(alphabet))]
 	}
 	return string(b)
 }
 
-// randomKey returns a random 32-character alphanumeric string, suitable
-// as a cookie signing or encryption secret for development.
+// randomKey returns a random 32-character hex string, suitable as a
+// signing secret for development.
 func randomKey() string {
-	return randomSuffix(32)
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand failing is a broken platform, not a routine error.
+		panic(fmt.Sprintf("reading crypto/rand: %v", err))
+	}
+	return hex.EncodeToString(b)
 }
 
 // String returns a compact one-line summary of the spec, useful for logs.

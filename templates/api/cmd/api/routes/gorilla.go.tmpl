@@ -13,6 +13,8 @@ func (app *application) routes() http.Handler {
 	mux := mux.NewRouter()
 
 	mux.HandleFunc("/v1/healthcheck", app.healthcheck).Methods(http.MethodGet)
+	mux.NotFoundHandler = http.HandlerFunc(app.notFound)
+	mux.MethodNotAllowedHandler = http.HandlerFunc(app.methodNotAllowed)
 
 {{- if .AccountsJWT}}
 

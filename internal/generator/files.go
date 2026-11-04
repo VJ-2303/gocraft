@@ -60,6 +60,7 @@ func fileMatrix(rsp spec.ResolvedSpec) []FileSpec {
 
 		{Template: "shared/internal/cookies/cookies.go.tmpl", OutPath: "internal/cookies/cookies.go", Cond: rsp.SecureCookies},
 		{Template: "shared/internal/mailer/mailer.go.tmpl", OutPath: "internal/mailer/mailer.go", Cond: rsp.NeedsMailer},
+		{Template: "shared/internal/mailer/mailer_test.go.tmpl", OutPath: "internal/mailer/mailer_test.go", Cond: rsp.NeedsMailer && rsp.Tests},
 		{Template: "shared/internal/password/hash.go.tmpl", OutPath: "internal/password/hash.go", Cond: rsp.HasAuth || rsp.BasicAuth},
 		{Template: "shared/internal/password/common.go.tmpl", OutPath: "internal/password/common.go", Cond: rsp.HasAuth},
 		{Template: "shared/internal/validator/validator.go.tmpl", OutPath: "internal/validator/validator.go", Cond: true},

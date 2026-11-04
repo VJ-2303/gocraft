@@ -32,6 +32,16 @@ func (w *MetricsResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Flush flushes any buffered data to the client, when the underlying
+// response writer supports flushing. This keeps streaming responses
+// (e.g. server-sent events) working under the request-logging
+// middleware.
+func (w *MetricsResponseWriter) Flush() {
+	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
+		flusher.Flush()
+	}
+}
+
 // Hijack supports connection upgrades for websockets; the recorded
 // metrics are simply frozen at upgrade time.
 func (w *MetricsResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {

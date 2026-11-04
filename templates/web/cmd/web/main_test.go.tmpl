@@ -2,14 +2,18 @@
 package main
 
 import (
+{{- if .NeedsDB}}
 	"context"
+{{- end}}
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+{{- if .NeedsDB}}
 	"os"
+{{- end}}
 	"strings"
 	"testing"
 {{- if .Sessions}}
