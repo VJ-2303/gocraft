@@ -259,31 +259,50 @@ func TestResponsiveRendering(t *testing.T) {
 	m.width = 120
 	m.height = 30
 	viewWide := m.View()
-	if !strings.Contains(viewWide, "ARCHITECTURE BLUEPRINT") {
-		t.Error("wide view must contain ARCHITECTURE BLUEPRINT right pane")
+	if !strings.Contains(viewWide, "summary") {
+		t.Error("wide view must contain the summary right pane")
 	}
 
 	// Narrow terminal (stacked)
 	m.width = 80
 	m.height = 24
 	viewNarrow := m.View()
-	if !strings.Contains(viewNarrow, "GOCRAFT") {
-		t.Error("narrow view must contain GOCRAFT header")
+	if !strings.Contains(viewNarrow, "gocraft") {
+		t.Error("narrow view must contain the gocraft header")
 	}
 
 	// Done view
 	m.state = stateDone
 	m.genCount = 30
 	viewDone := m.View()
-	if !strings.Contains(viewDone, "Project Ready") {
-		t.Error("done view must contain 'Project Ready'")
+	if !strings.Contains(viewDone, "project ready") {
+		t.Error("done view must contain 'project ready'")
 	}
 
 	// Failed view
 	m.state = stateFailed
 	m.genErr = errors.New("mock generation error")
 	viewFailed := m.View()
-	if !strings.Contains(viewFailed, "GENERATION FAILED") {
-		t.Error("failed view must contain 'GENERATION FAILED'")
+	if !strings.Contains(viewFailed, "generation failed") {
+		t.Error("failed view must contain 'generation failed'")
+	}
+}
+
+func TestWrapToWidth(t *testing.T) {
+	tests := []struct {
+		give  string
+		width int
+		want  []string
+	}{
+		{"alpha beta gamma", 5, []string{"alpha", "beta", "gamma"}},
+		{"abcdefghij", 4, []string{"abcd", "efgh", "ij"}},
+		{"a b", 1, []string{"a", "b"}},
+		{"", 10, []string{""}},
+	}
+	for _, tt := range tests {
+		got := wrapToWidth(tt.give, tt.width)
+		if strings.Join(got, "|") != strings.Join(tt.want, "|") {
+			t.Errorf("wrapToWidth(%q, %d) = %v, want %v", tt.give, tt.width, got, tt.want)
+		}
 	}
 }

@@ -7,6 +7,50 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// wrapToWidth breaks s into lines of at most width runes, preferring to
+// break at spaces; tokens longer than width are hard-broken.
+func wrapToWidth(s string, width int) []string {
+	if width <= 0 || s == "" {
+		return []string{s}
+	}
+	var lines []string
+	for len([]rune(s)) > width {
+		r := []rune(s)
+		cut := -1
+		for i := width; i > 0; i-- {
+			if r[i] == ' ' {
+				cut = i
+				break
+			}
+		}
+		if cut <= 0 {
+			cut = width
+			lines = append(lines, string(r[:cut]))
+			s = string(r[cut:])
+			continue
+		}
+		lines = append(lines, string(r[:cut]))
+		s = strings.TrimLeft(string(r[cut:]), " ")
+	}
+	return append(lines, s)
+}
+
+// renderRow renders "prefix value" with the value wrapped to the given
+// width. Continuation lines align with the value column.
+func renderRow(prefix string, prefixWidth int, value string, width int, valueStyle lipgloss.Style) string {
+	body := wrapToWidth(value, width-prefixWidth)
+	indent := strings.Repeat(" ", prefixWidth)
+	var sb strings.Builder
+	sb.WriteString(prefix)
+	sb.WriteString(valueStyle.Render(body[0]))
+	for _, l := range body[1:] {
+		sb.WriteString("\n")
+		sb.WriteString(indent)
+		sb.WriteString(valueStyle.Render(l))
+	}
+	return sb.String()
+}
+
 func (m *model) View() string {
 	switch m.state {
 	case stateDone:
@@ -15,6 +59,11 @@ func (m *model) View() string {
 		return m.viewFailed()
 	case stateGenerating:
 		return m.viewGenerating()
+	}
+
+	// The review step duplicates the blueprint; give it the full width.
+	if m.current().kind == kindReview {
+		return m.viewLeftPane(m.width)
 	}
 
 	if m.width >= 100 {
@@ -30,18 +79,19 @@ func (m *model) viewLeftPane(width int) string {
 	box := lipgloss.NewStyle().Width(width).Padding(1, 2)
 	var content strings.Builder
 
-	// Top Bar
+	// Top bar
 	var stepText string
 	if m.stepIdx == m.reviewIdx() {
-		stepText = "Review & Launch"
+		stepText = "review"
 	} else {
-		stepText = fmt.Sprintf("Step %d of %d · %s", m.stepIdx+1, len(m.questions), m.current().category)
+		stepText = fmt.Sprintf("step %d/%d · %s", m.visiblePos(m.stepIdx), m.visibleTotal(), strings.ToLower(m.current().category))
 	}
-	topBar := styleCategory.Render("GOCRAFT") + " " + styleDesc.Render("—") + " " + styleDesc.Render(stepText)
+	topBar := styleCategory.Render("gocraft") + " " + styleDesc.Render("· "+stepText)
 	if m.editingFromReview {
-		topBar += " " + styleBadge.Render("Editing from Review")
+		topBar += " " + styleDesc.Render("· editing from review")
 	}
-	content.WriteString(topBar + "\n\n")
+	content.WriteString(topBar)
+	content.WriteString("\n\n")
 
 	// Conflict confirmation view
 	if m.state == stateConflictConfirm {
@@ -49,11 +99,13 @@ func (m *model) viewLeftPane(width int) string {
 		return box.Render(content.String())
 	}
 
-	// Question Title & Desc
+	// Question
 	q := m.current()
-	content.WriteString(styleTitle.Render(q.title) + "\n")
+	content.WriteString(styleTitle.Render(q.title))
+	content.WriteString("\n")
 	if q.desc != "" {
-		content.WriteString(styleDesc.Render(q.desc) + "\n\n")
+		content.WriteString(styleDesc.Render(q.desc))
+		content.WriteString("\n\n")
 	} else {
 		content.WriteString("\n")
 	}
@@ -61,7 +113,7 @@ func (m *model) viewLeftPane(width int) string {
 	// Body by kind
 	switch q.kind {
 	case kindReview:
-		content.WriteString(m.renderReviewTable())
+		content.WriteString(m.renderReviewTable(width - 6))
 	case kindSelect:
 		opts := q.options(m.values)
 		for i, o := range opts {
@@ -81,7 +133,9 @@ func (m *model) viewLeftPane(width int) string {
 					line += "  " + styleBadge.Render(badge)
 				}
 			}
-			content.WriteString(prefix + line + "\n")
+			content.WriteString(prefix)
+			content.WriteString(line)
+			content.WriteString("\n")
 		}
 	case kindBool:
 		opts := []struct {
@@ -104,24 +158,33 @@ func (m *model) viewLeftPane(width int) string {
 			if badge != "" {
 				line += "  " + styleBadge.Render(badge)
 			}
-			content.WriteString(prefix + line + "\n")
+			content.WriteString(prefix)
+			content.WriteString(line)
+			content.WriteString("\n")
 		}
 	case kindText:
-		content.WriteString(styleInputPrompt.Render("❯ ") + m.textInput.View() + "\n")
+		content.WriteString(styleInputPrompt.Render("❯ "))
+		content.WriteString(m.textInput.View())
+		content.WriteString("\n")
 	}
 
-	// Error or notice line
+	// Hint line: error, pending-quit notice, or blank
 	content.WriteString("\n")
-	if m.errText != "" {
-		content.WriteString(styleError.Render("✗ "+m.errText) + "\n")
-	} else {
+	switch {
+	case m.errText != "":
+		content.WriteString(styleError.Render("✗ " + m.errText))
+		content.WriteString("\n")
+	case m.pendingCtrlC:
+		content.WriteString(styleDesc.Render("press ctrl+c again to quit"))
+		content.WriteString("\n")
+	default:
 		content.WriteString("\n")
 	}
 
 	// Keybindings footer
 	content.WriteString("\n")
 	if q.kind == kindReview {
-		content.WriteString(formatHelp([2]string{"1-9", "jump to step"}, [2]string{"enter", "generate"}, [2]string{"esc", "back"}, [2]string{"ctrl+c", "quit"}))
+		content.WriteString(formatHelp([2]string{"1-9", "edit"}, [2]string{"enter", "generate"}, [2]string{"esc", "back"}, [2]string{"ctrl+c", "quit"}))
 	} else if q.kind == kindText {
 		content.WriteString(formatHelp([2]string{"enter", "confirm"}, [2]string{"esc", "back"}, [2]string{"ctrl+c", "quit"}))
 	} else if q.kind == kindBool {
@@ -134,16 +197,21 @@ func (m *model) viewLeftPane(width int) string {
 }
 
 func (m *model) renderConflictBox(width int) string {
-	b := strings.Builder{}
-	b.WriteString(styleConflictBadge.Render(" CAUTION: DESTRUCTIVE CHANGE ") + "\n\n")
-	b.WriteString(styleOptionSelected.Render(m.conflictMsg) + "\n\n")
-	b.WriteString(styleKeyHint.Render("Apply change and reset dependent options? ") + styleKey.Render("[y/N]") + "\n\n")
-	b.WriteString(formatHelp([2]string{"y", "confirm"}, [2]string{"n/esc", "cancel"}))
+	var b strings.Builder
+	for _, l := range wrapToWidth(m.conflictMsg, width) {
+		b.WriteString(styleConflictBadge.Render(l))
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
+	b.WriteString(styleKeyHint.Render("apply and continue? "))
+	b.WriteString(styleKey.Render("[y/N]"))
+	b.WriteString("\n\n")
+	b.WriteString(formatHelp([2]string{"y", "apply"}, [2]string{"n/esc", "keep current answers"}))
 	return b.String()
 }
 
-func (m *model) renderReviewTable() string {
-	lines := []struct {
+func (m *model) renderReviewTable(width int) string {
+	rows := []struct {
 		num   string
 		label string
 		val   string
@@ -160,67 +228,61 @@ func (m *model) renderReviewTable() string {
 	}
 
 	var sb strings.Builder
-	for _, l := range lines {
-		keyBadge := styleKey.Render("[" + l.num + "]")
-		field := styleDesc.Render(fmt.Sprintf("%-14s", l.label))
-		val := styleOptionSelected.Render(l.val)
-		sb.WriteString(fmt.Sprintf("%s %s %s\n", keyBadge, field, val))
+	for _, r := range rows {
+		prefix := styleKey.Render("["+r.num+"]") + " " + styleDesc.Render(fmt.Sprintf("%-14s", r.label)) + " "
+		sb.WriteString(renderRow(prefix, 19, r.val, width, styleOptionSelected))
+		sb.WriteString("\n")
 	}
 	return sb.String()
 }
 
 func (m *model) viewRightPane(width int) string {
-	box := stylePaneBorder.Width(width).Padding(1, 1)
 	var sb strings.Builder
 
-	sb.WriteString(styleInspectorTitle.Render("ARCHITECTURE BLUEPRINT") + "\n")
-	sb.WriteString(styleDesc.Render(strings.Repeat("─", width-6)) + "\n")
+	sb.WriteString(styleInspectorTitle.Render("summary"))
+	sb.WriteString("\n")
 
-	type row struct {
-		k, v string
+	row := func(k, v string) {
+		prefix := fmt.Sprintf("%-10s", k) + " "
+		sb.WriteString(renderRow(styleInspectorText.Render(prefix), 11, v, width-2, styleInspectorActive))
+		sb.WriteString("\n")
 	}
-	rows := []row{
-		{"Type", string(m.values.appType)},
-		{"Module", m.values.modulePath},
-		{"Database", string(m.values.database)},
-		{"Router", string(m.values.router)},
-		{"Config", string(m.values.configSource)},
-		{"Logging", string(m.values.logFormat)},
-		{"Accounts", m.values.accounts},
-	}
-
-	for _, r := range rows {
-		sb.WriteString(fmt.Sprintf("%-10s %s\n", styleInspectorText.Render(r.k), styleInspectorActive.Render(r.v)))
-	}
-
-	sb.WriteString("\n" + styleInspectorTitle.Render("DEPENDENCY CONSTRAINTS") + "\n")
-	sb.WriteString(styleDesc.Render(strings.Repeat("─", width-6)) + "\n")
+	row("type", string(m.values.appType))
+	row("module", m.values.modulePath)
+	row("database", string(m.values.database))
+	row("router", string(m.values.router))
+	row("config", string(m.values.configSource))
+	row("logging", string(m.values.logFormat))
+	row("accounts", m.values.accounts)
 
 	var deps []string
 	if m.values.accounts == "full" {
-		deps = append(deps, "• Full accounts ↳ SQLite + Sessions + Emails")
+		deps = append(deps, "full accounts → sqlite + sessions + emails + migrations")
 	} else if m.values.accounts == "jwt" {
-		deps = append(deps, "• JWT accounts ↳ SQLite + Emails")
+		deps = append(deps, "jwt accounts → sqlite + emails + migrations")
 	}
 	if m.values.migrations {
-		deps = append(deps, "• SQL migrations ↳ Database required")
+		deps = append(deps, "migrations → database")
 	}
 	if m.values.sessions {
-		deps = append(deps, "• Sessions ↳ Database required")
+		deps = append(deps, "sessions → database")
 	}
 	if m.values.errorNotifs {
-		deps = append(deps, "• Error notifications ↳ Emails required")
+		deps = append(deps, "error notifications → emails")
 	}
 
-	if len(deps) == 0 {
-		sb.WriteString(styleInspectorText.Render("No active constraints\n"))
-	} else {
+	if len(deps) > 0 {
+		sb.WriteString("\n")
+		sb.WriteString(styleInspectorTitle.Render("also included"))
+		sb.WriteString("\n")
 		for _, d := range deps {
-			sb.WriteString(styleBadge.Render(d) + "\n")
+			sb.WriteString(renderRow(styleBadge.Render("· "), 2, d, width-2, styleBadge))
+			sb.WriteString("\n")
 		}
 	}
 
-	return box.Render(sb.String())
+	pane := lipgloss.NewStyle().Width(width).PaddingLeft(2)
+	return pane.Render(sb.String())
 }
 
 func (m *model) viewStacked() string {
@@ -230,7 +292,8 @@ func (m *model) viewStacked() string {
 func (m *model) viewGenerating() string {
 	box := lipgloss.NewStyle().Padding(2, 3)
 	var sb strings.Builder
-	sb.WriteString(styleCategory.Render("GOCRAFT") + "\n\n")
+	sb.WriteString(styleCategory.Render("gocraft"))
+	sb.WriteString("\n\n")
 	sb.WriteString(fmt.Sprintf("%s Scaffolding codebase...\n", m.spinner.View()))
 	sb.WriteString(styleDesc.Render("Writing template files, configuring dependencies, and resolving Go modules.\n"))
 	return box.Render(sb.String())
@@ -239,20 +302,34 @@ func (m *model) viewGenerating() string {
 func (m *model) viewDone() string {
 	box := lipgloss.NewStyle().Padding(2, 3)
 	var sb strings.Builder
-	sb.WriteString(styleCategory.Render("GOCRAFT") + " " + styleDesc.Render("—") + " " + styleTitle.Render("Project Ready") + "\n\n")
-	sb.WriteString(fmt.Sprintf("Successfully scaffolded %d files into:\n", m.genCount))
-	sb.WriteString("  " + styleOptionSelected.Render(m.values.targetDir) + "\n\n")
+	sb.WriteString(styleCategory.Render("gocraft"))
+	sb.WriteString(" ")
+	sb.WriteString(styleDesc.Render("· project ready"))
+	sb.WriteString("\n\n")
+	sb.WriteString(fmt.Sprintf("Successfully scaffolded %d files into\n", m.genCount))
+	sb.WriteString(styleOptionSelected.Render("  " + m.values.targetDir))
+	sb.WriteString("\n\n")
 
-	sb.WriteString(styleInspectorTitle.Render("Architecture:") + "\n")
-	sb.WriteString(fmt.Sprintf("  • Go 1.27 %s application with %s router\n", m.values.appType, m.values.router))
-	sb.WriteString(fmt.Sprintf("  • Database: %s (migrations: %t)\n", m.values.database, m.values.migrations))
-	sb.WriteString(fmt.Sprintf("  • Configuration: %s · Logging: %s\n", m.values.configSource, m.values.logFormat))
-	sb.WriteString(fmt.Sprintf("  • Accounts: %s\n\n", m.values.accounts))
+	sb.WriteString(styleInspectorTitle.Render("summary"))
+	sb.WriteString("\n")
+	row := func(k, v string) {
+		sb.WriteString(renderRow(styleInspectorText.Render(fmt.Sprintf("%-10s", k)+" "), 11, v, 60, styleInspectorActive))
+		sb.WriteString("\n")
+	}
+	row("type", fmt.Sprintf("go 1.27 %s · %s router", m.values.appType, m.values.router))
+	row("database", fmt.Sprintf("%s (migrations: %t)", m.values.database, m.values.migrations))
+	row("config", fmt.Sprintf("%s · %s", m.values.configSource, m.values.logFormat))
+	row("accounts", m.values.accounts)
 
-	sb.WriteString(styleInspectorTitle.Render("Next steps:") + "\n")
-	sb.WriteString(fmt.Sprintf("  cd %s\n", m.values.targetDir))
-	sb.WriteString("  make help\n")
-	sb.WriteString("  make run\n\n")
+	sb.WriteString("\n")
+	sb.WriteString(styleInspectorTitle.Render("next steps"))
+	sb.WriteString("\n")
+	sb.WriteString(styleKey.Render("  cd " + m.values.targetDir))
+	sb.WriteString("\n")
+	sb.WriteString(styleKey.Render("  make help"))
+	sb.WriteString("\n")
+	sb.WriteString(styleKey.Render("  make run"))
+	sb.WriteString("\n\n")
 
 	sb.WriteString(formatHelp([2]string{"enter/q", "exit"}))
 	return box.Render(sb.String())
@@ -261,9 +338,11 @@ func (m *model) viewDone() string {
 func (m *model) viewFailed() string {
 	box := lipgloss.NewStyle().Padding(2, 3)
 	var sb strings.Builder
-	sb.WriteString(styleError.Render("GOCRAFT — GENERATION FAILED") + "\n\n")
+	sb.WriteString(styleError.Render("gocraft · generation failed"))
+	sb.WriteString("\n\n")
 	if m.genErr != nil {
-		sb.WriteString(styleOptionNormal.Render(m.genErr.Error()) + "\n\n")
+		sb.WriteString(styleOptionNormal.Render(m.genErr.Error()))
+		sb.WriteString("\n\n")
 	}
 	sb.WriteString(formatHelp([2]string{"enter/q", "exit"}))
 	return box.Render(sb.String())

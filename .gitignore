@@ -33,3 +33,8 @@ coverage.out
 .projectmem/
 
 # Generated test output (/tmp is absolute — not tracked)
+
+.projectmem/events.jsonl
+.projectmem/watch.pid
+.projectmem/watch.log
+.projectmem/structure.json

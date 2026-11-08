@@ -8,18 +8,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Warm Editorial Palette:
-// Grounded charcoal, warm muted stone, and rich copper/amber accent.
-// Adheres strictly to the anti-AI-slop frontend-design principles:
-// restrained, typography-first, no purple gradients, no glowing boxes.
+// Palette: neutral base with a single muted steel-blue accent. Restrained,
+// typography-first. No shouting caps, no background chips behind text.
 var (
-	colorFg      = lipgloss.Color("255") // #f5f5f4 chalk white
-	colorMuted   = lipgloss.Color("244") // #78716c warm stone gray
-	colorBorder  = lipgloss.Color("238") // #27272a dark slate border
-	colorAccent  = lipgloss.Color("178") // #d97706 warm amber / copper
-	colorSuccess = lipgloss.Color("71")  // #16a34a forest green / sage
-	colorWarning = lipgloss.Color("167") // #dc2626 warm terracotta
-	colorBadgeBg = lipgloss.Color("236") // subtle badge background
+	colorFg      = lipgloss.Color("254") // near-white, body text
+	colorMuted   = lipgloss.Color("245") // warm neutral gray, secondary text
+	colorAccent  = lipgloss.Color("67")  // muted steel blue, interactive accent
+	colorSuccess = lipgloss.Color("108") // subdued sage green
+	colorWarning = lipgloss.Color("131") // muted brick red
+	colorSteel   = lipgloss.Color("110") // brighter steel, keys and markers
 )
 
 var (
@@ -43,21 +40,17 @@ var (
 
 	styleCursor = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(colorAccent)
+			Foreground(colorSteel)
 
 	styleBadge = lipgloss.NewStyle().
-			Foreground(colorSuccess).
-			Background(colorBadgeBg).
-			Padding(0, 1)
+			Foreground(colorSuccess)
 
 	styleConflictBadge = lipgloss.NewStyle().
-				Foreground(colorWarning).
-				Background(colorBadgeBg).
-				Padding(0, 1)
+				Foreground(colorWarning)
 
 	styleInspectorTitle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(colorAccent)
+				Foreground(colorMuted)
 
 	styleInspectorText = lipgloss.NewStyle().
 				Foreground(colorMuted)
@@ -69,20 +62,15 @@ var (
 			Foreground(colorMuted)
 
 	styleKey = lipgloss.NewStyle().
-			Foreground(colorAccent).
+			Foreground(colorSteel).
 			Bold(true)
-
-	stylePaneBorder = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, true).
-			BorderForeground(colorBorder).
-			PaddingLeft(2)
 
 	styleInput = lipgloss.NewStyle().
 			Foreground(colorFg).
 			Bold(true)
 
 	styleInputPrompt = lipgloss.NewStyle().
-				Foreground(colorAccent).
+				Foreground(colorSteel).
 				Bold(true)
 
 	styleError = lipgloss.NewStyle().

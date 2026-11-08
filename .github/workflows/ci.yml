@@ -3,8 +3,16 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**.md'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - '**.md'
+  # Nightly full-matrix run. UTC.
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -38,3 +46,68 @@ jobs:
 
       - name: Staticcheck
         run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+
+  gate:
+    name: Gate (representative)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run gate
+        run: make gate
+
+  matrix:
+    name: Matrix (pairwise, shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Full 299-permutation matrix runs on nightly schedule and manual dispatch only
+    # to conserve GitHub Actions runner minutes. Commits and PRs are verified by gate.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Resolve Go cache paths
+        id: goenv
+        run: |
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Go build and module caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.goenv.outputs.gocache }}
+            ${{ steps.goenv.outputs.gomodcache }}
+          key: ${{ runner.os }}-go-matrix-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-matrix-
+
+      - name: Warm module cache
+        run: go mod download
+
+      - name: Generate and audit shard ${{ matrix.shard }}
+        run: make matrix-shard MATRIX_SHARD=${{ matrix.shard }} MATRIX_SHARDS=4 MATRIX_DIR=/tmp/gocraft-matrix
+
+      - name: Upload matrix output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-output-shard-${{ matrix.shard }}-${{ github.run_number }}
+          path: /tmp/gocraft-matrix
+          retention-days: 7

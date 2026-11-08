@@ -51,6 +51,9 @@ type model struct {
 	// Inline error & feedback
 	errText string
 
+	// Quit confirmation: ctrl+c must be pressed twice
+	pendingCtrlC bool
+
 	// Generation
 	generateFn   generateFunc
 	resolvedSpec spec.ResolvedSpec
@@ -117,6 +120,34 @@ func (m *model) current() question {
 
 func (m *model) reviewIdx() int {
 	return len(m.questions) - 1
+}
+
+// visibleIndices returns the indices of questions that are currently
+// visible, in wizard order.
+func (m *model) visibleIndices() []int {
+	var idx []int
+	for i, q := range m.questions {
+		if q.visible == nil || q.visible(m.values) {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
+// visibleTotal reports how many questions the user will actually see.
+func (m *model) visibleTotal() int {
+	return len(m.visibleIndices())
+}
+
+// visiblePos returns the 1-based position of the question at index i
+// within the visible set.
+func (m *model) visiblePos(i int) int {
+	for pos, idx := range m.visibleIndices() {
+		if idx == i {
+			return pos + 1
+		}
+	}
+	return 0
 }
 
 func (m *model) nextStep(from int) int {
@@ -303,7 +334,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
-			return m, tea.Quit
+			if m.pendingCtrlC {
+				return m, tea.Quit
+			}
+			m.pendingCtrlC = true
+			return m, nil
+		default:
+			m.pendingCtrlC = false
 		}
 
 		switch m.state {
@@ -458,6 +495,9 @@ func (m *model) updateQuestion(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			val := strings.TrimSpace(m.textInput.Value())
+			if val == "" && q.defaultOnEmpty != "" {
+				val = q.defaultOnEmpty
+			}
 			if q.validate != nil {
 				if err := q.validate(val); err != nil {
 					m.errText = err.Error()

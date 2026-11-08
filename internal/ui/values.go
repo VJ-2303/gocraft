@@ -33,7 +33,6 @@ type wizardValues struct {
 func defaultWizardValues() *wizardValues {
 	return &wizardValues{
 		appType:        string(spec.AppWeb),
-		modulePath:     "example.com/myapp",
 		database:       string(spec.DBNone),
 		router:         string(spec.RouterServeMux),
 		configSource:   string(spec.ConfigFlags),
@@ -41,7 +40,6 @@ func defaultWizardValues() *wizardValues {
 		gitIntegration: true,
 		tests:          true,
 		accounts:       "none",
-		targetDir:      "./my-app",
 	}
 }
 
@@ -134,7 +132,7 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 				needs = append(needs, "Migrations")
 			}
 			if len(needs) > 0 {
-				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
+				return fmt.Sprintf("auto: %s", formatList(needs))
 			}
 		} else if optionValue == "jwt" {
 			var needs []string
@@ -148,7 +146,7 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 				needs = append(needs, "Migrations")
 			}
 			if len(needs) > 0 {
-				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
+				return fmt.Sprintf("auto: %s", formatList(needs))
 			}
 		}
 	case "sessions":
@@ -161,16 +159,16 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 				needs = append(needs, "Migrations")
 			}
 			if len(needs) > 0 {
-				return fmt.Sprintf("+auto-enables: %s", formatList(needs))
+				return fmt.Sprintf("auto: %s", formatList(needs))
 			}
 		}
 	case "migrations":
 		if optionValue == "true" && v.database == string(spec.DBNone) {
-			return "+auto-enables SQLite"
+			return "auto: sqlite"
 		}
 	case "error_notifications":
 		if optionValue == "true" && !v.emails {
-			return "+auto-enables Emails"
+			return "auto: emails"
 		}
 	case "database":
 		if optionValue == string(spec.DBNone) {
@@ -185,7 +183,7 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 				lost = append(lost, "Accounts")
 			}
 			if len(lost) > 0 {
-				return fmt.Sprintf("!will disable: %s", formatList(lost))
+				return fmt.Sprintf("disables: %s", formatList(lost))
 			}
 		}
 	case "app_type":
@@ -201,7 +199,7 @@ func (v *wizardValues) detectCascadeBadges(id string, optionValue string) string
 				lost = append(lost, "Full Accounts")
 			}
 			if len(lost) > 0 {
-				return fmt.Sprintf("!will disable web features: %s", formatList(lost))
+				return fmt.Sprintf("disables: %s", formatList(lost))
 			}
 		}
 	}
@@ -222,7 +220,7 @@ func (v *wizardValues) destructiveConflict(id string, optionValue string) (strin
 			affected = append(affected, "User Accounts")
 		}
 		if len(affected) > 0 {
-			return fmt.Sprintf("Selecting 'None' will disable active features: %s.", formatList(affected)), true
+			return fmt.Sprintf("This will disable: %s", formatList(affected)), true
 		}
 	}
 

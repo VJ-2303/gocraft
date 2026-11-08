@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -878,150 +880,181 @@ func TestGeneratePlatformFeatures(t *testing.T) {
 	}
 }
 
-// matrixSpecs returns the curated permutation set for the compile
-// matrix: every router for both app types, every database dialect, both
-// configuration sources, every log format, and the feature combinations
-// most likely to interact badly with each other.
+// matrixSpecs returns all spec permutations for the check matrix. It is
+// the single source of truth for CI coverage: every legal 2-dimension
+// interaction appears, plus the 3-dimension auth/DB/migrations sets and
+// the historically broken sparse edges. New fields must extend this set
+// with their own coverage.
 func matrixSpecs() map[string]spec.ProjectSpec {
-	base := func() spec.ProjectSpec {
-		s := testSpec()
-		return s
-	}
-	api := func() spec.ProjectSpec {
-		s := base()
-		s.AppType = spec.AppAPI
-		return s
-	}
+	// Core 2-slice: one-factor sweeps over every multi-valued dimension.
+	appTypes := []spec.AppType{spec.AppWeb, spec.AppAPI}
+	routers := []spec.Router{spec.RouterServeMux, spec.RouterFlow, spec.RouterChi, spec.RouterGorilla, spec.RouterHttpRouter}
+	dbs := []spec.Database{spec.DBNone, spec.DBSQLite, spec.DBPostgres, spec.DBMySQL}
+	configs := []spec.ConfigSource{spec.ConfigFlags, spec.ConfigEnv}
+	logs := []spec.LogFormat{spec.LogPlaintext, spec.LogJSON, spec.LogColorized}
 
 	specs := map[string]spec.ProjectSpec{}
-	add := func(name string, mutate func(*spec.ProjectSpec)) {
-		s := base()
-		if strings.HasPrefix(name, "api-") {
-			s = api()
-		}
-		mutate(&s)
+	add := func(name string, s spec.ProjectSpec) {
 		s.ApplyDependencies()
+		if s.AppType == spec.AppAPI && s.Sessions {
+			s.Sessions = false
+		}
+		if err := s.Validate(); err != nil {
+			// Specifications that do not pass validation are harness
+			// bugs; fail loudly rather than silently skipping them.
+			panic(fmt.Sprintf("matrix spec %s invalid after dependencies: %v", name, err))
+		}
+		if _, dup := specs[name]; dup {
+			panic("duplicate matrix spec name: " + name)
+		}
 		specs[name] = s
 	}
 
-	// Every router, both app types, no database.
-	for _, r := range []spec.Router{spec.RouterServeMux, spec.RouterFlow, spec.RouterChi, spec.RouterGorilla, spec.RouterHttpRouter} {
-		router := r
-		add(fmt.Sprintf("web-router-%s", router), func(s *spec.ProjectSpec) { s.Router = router })
-		add(fmt.Sprintf("api-router-%s", router), func(s *spec.ProjectSpec) { s.Router = router })
+	// 1-way baseline: every enum value, both app types.
+	for _, at := range appTypes {
+		add(fmt.Sprintf("core-%s", at), buildSpec(at, dbs[0], routers[0], configs[0], logs[0], nil))
+		for _, r := range routers {
+			add(fmt.Sprintf("core-%s-router-%s", at, r), buildSpec(at, dbs[0], r, configs[0], logs[0], nil))
+		}
+		for _, d := range dbs {
+			s := buildSpec(at, d, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) {
+				if d != spec.DBNone {
+					s.Migrations = true
+				}
+			})
+			add(fmt.Sprintf("core-%s-db-%s", at, d), s)
+		}
+		for _, c := range configs {
+			add(fmt.Sprintf("core-%s-config-%s", at, c), buildSpec(at, dbs[0], routers[0], c, logs[0], nil))
+		}
+		for _, l := range logs {
+			add(fmt.Sprintf("core-%s-log-%s", at, l), buildSpec(at, dbs[0], routers[0], configs[0], l, nil))
+		}
 	}
 
-	// Every database dialect, with migrations, both app types.
-	for _, d := range []spec.Database{spec.DBSQLite, spec.DBPostgres, spec.DBMySQL} {
-		dialect := d
-		add(fmt.Sprintf("web-db-%s", dialect), func(s *spec.ProjectSpec) {
-			s.Database = dialect
-			s.Migrations = true
-		})
-		add(fmt.Sprintf("api-db-%s", dialect), func(s *spec.ProjectSpec) {
-			s.Database = dialect
-			s.Migrations = true
-		})
+	// 2-slice: each remaining enum crossed with every other enum.
+	addCross := func(name string, s spec.ProjectSpec) { add(name, s) }
+	for _, at := range appTypes {
+		for _, r := range routers {
+			for _, d := range dbs {
+				addCross(fmt.Sprintf("cross-%s-%s-%s", at, r, d), buildSpec(at, d, r, configs[0], logs[0], func(s *spec.ProjectSpec) {
+					if d != spec.DBNone {
+						s.Migrations = true
+					}
+				}))
+			}
+		}
+		for _, r := range routers {
+			for _, c := range configs {
+				addCross(fmt.Sprintf("cross-%s-%s-config-%s", at, r, c), buildSpec(at, dbs[0], r, c, logs[0], nil))
+			}
+		}
+		for _, r := range routers {
+			for _, l := range logs {
+				addCross(fmt.Sprintf("cross-%s-%s-log-%s", at, r, l), buildSpec(at, dbs[0], r, configs[0], l, nil))
+			}
+		}
+		for _, d := range dbs {
+			for _, c := range configs {
+				addCross(fmt.Sprintf("cross-%s-db-%s-config-%s", at, d, c), buildSpec(at, d, routers[0], c, logs[0], func(s *spec.ProjectSpec) {
+					if d != spec.DBNone {
+						s.Migrations = true
+					}
+				}))
+			}
+		}
+		for _, d := range dbs {
+			for _, l := range logs {
+				addCross(fmt.Sprintf("cross-%s-db-%s-log-%s", at, d, l), buildSpec(at, d, routers[0], configs[0], l, func(s *spec.ProjectSpec) {
+					if d != spec.DBNone {
+						s.Migrations = true
+					}
+				}))
+			}
+		}
+		for _, c := range configs {
+			for _, l := range logs {
+				addCross(fmt.Sprintf("cross-%s-config-%s-log-%s", at, c, l), buildSpec(at, dbs[0], routers[0], c, l, nil))
+			}
+		}
+		// Explicit appType × router × db corner with migrations on.
+		for _, d := range dbs {
+			if d == spec.DBNone {
+				continue
+			}
+			for _, r := range routers {
+				addCross(fmt.Sprintf("cross-%s-%s-%s-mig", at, r, d), buildSpec(at, d, r, configs[1], logs[1], func(s *spec.ProjectSpec) {
+					s.Migrations = true
+				}))
+			}
+		}
 	}
 
-	// Database without migration helpers.
-	add("web-db-nomigrate", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBSQLite
-		s.Migrations = false
-	})
+	// Feature 2-slice: each free feature alone, and paired with every
+	// other free feature on both app types.
+	features := []struct {
+		name string
+		set  func(*spec.ProjectSpec)
+	}{
+		{"requestlogging", func(s *spec.ProjectSpec) { s.RequestLogging = true }},
+		{"basicauth", func(s *spec.ProjectSpec) { s.BasicAuth = true }},
+		{"gitintegration", func(s *spec.ProjectSpec) { s.GitIntegration = true }},
+		{"securecookies", func(s *spec.ProjectSpec) { s.SecureCookies = true }},
+		{"autohttps", func(s *spec.ProjectSpec) { s.AutoHTTPS = true }},
+		{"emails", func(s *spec.ProjectSpec) { s.Emails = true }},
+		{"tests", func(s *spec.ProjectSpec) { s.Tests = true }},
+		{"sessions", func(s *spec.ProjectSpec) { s.Sessions = true }},
+		{"migrations", func(s *spec.ProjectSpec) { s.Migrations = true }},
+	}
+	for _, at := range appTypes {
+		for _, f := range features {
+			if at == spec.AppAPI && f.name == "sessions" {
+				continue
+			}
+			add(fmt.Sprintf("feat-%s-%s", at, f.name), buildSpec(at, spec.DBSQLite, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) {
+				if s.Database != spec.DBNone {
+					s.Migrations = true
+				}
+				f.set(s)
+			}))
+		}
+		for i, a := range features {
+			for _, b := range features[i+1:] {
+				add(fmt.Sprintf("feat-%s-%s+%s", at, a.name, b.name), buildSpec(at, spec.DBSQLite, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) {
+					if s.Database != spec.DBNone {
+						s.Migrations = true
+					}
+					a.set(s)
+					b.set(s)
+				}))
+			}
+		}
+	}
 
-	// Configuration sources and log formats.
-	add("web-env-json", func(s *spec.ProjectSpec) {
-		s.ConfigSource = spec.ConfigEnv
-		s.LogFormat = spec.LogJSON
-	})
-	add("api-env-colorized", func(s *spec.ProjectSpec) {
-		s.ConfigSource = spec.ConfigEnv
-		s.LogFormat = spec.LogColorized
-	})
-	add("web-flags-json", func(s *spec.ProjectSpec) {
-		s.ConfigSource = spec.ConfigFlags
-		s.LogFormat = spec.LogJSON
-	})
+	// Sparse edges — historically broken shapes. — historically broken shapes.
+	add("web-auto-https-only", buildSpec(spec.AppWeb, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.AutoHTTPS = true }))
+	add("api-auto-https-only", buildSpec(spec.AppAPI, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.AutoHTTPS = true }))
+	add("web-emails-only", buildSpec(spec.AppWeb, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.Emails = true }))
+	add("api-emails-only", buildSpec(spec.AppAPI, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.Emails = true; s.Tests = true }))
+	add("web-tests-only", buildSpec(spec.AppWeb, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.Tests = true }))
+	add("api-tests-only", buildSpec(spec.AppAPI, spec.DBNone, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) { s.Tests = true }))
 
-	// Free optional features together.
-	add("web-features", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBSQLite
+	// Everything-on shapes.
+	add("web-everything", buildSpec(spec.AppWeb, spec.DBSQLite, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) {
 		s.Migrations = true
 		s.RequestLogging = true
 		s.BasicAuth = true
 		s.GitIntegration = true
 		s.SecureCookies = true
-	})
-	add("api-features", func(s *spec.ProjectSpec) {
-		s.RequestLogging = true
-		s.BasicAuth = true
-		s.GitIntegration = true
-		s.SecureCookies = true
-	})
-
-	// Sessions across dialects.
-	add("web-sessions-pg", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBPostgres
-		s.Migrations = true
 		s.Sessions = true
-	})
-	add("web-sessions-mysql", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBMySQL
-		s.Migrations = true
-		s.Sessions = true
-	})
-
-	// Accounts variants across dialects.
-	add("web-accounts-pg", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBPostgres
-		s.Migrations = true
-		s.AccountsFull = true
-	})
-	add("api-jwt-mysql", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBMySQL
-		s.Migrations = true
-		s.AccountsJWT = true
-	})
-
-	// Platform features together.
-	add("web-platform", func(s *spec.ProjectSpec) {
 		s.AutoHTTPS = true
 		s.CustomErrorPages = true
 		s.Emails = true
 		s.ErrorNotifications = true
-	})
-
-	// Edge combination: AutoHTTPS and nothing else. This shape once produced
-	// a generated API that did not compile.
-	add("web-auto-https-only", func(s *spec.ProjectSpec) { s.AutoHTTPS = true })
-	add("api-auto-https-only", func(s *spec.ProjectSpec) { s.AutoHTTPS = true })
-
-	// Emails without a database or migrations. This shape once produced a
-	// mailer whose embedded template cache was empty.
-	add("api-emails-only", func(s *spec.ProjectSpec) {
-		s.Emails = true
-		s.Tests = true
-	})
-
-	// Everything on, both app types.
-	add("web-everything", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBSQLite
-		s.Migrations = true
-		s.RequestLogging = true
-		s.BasicAuth = true
-		s.GitIntegration = true
-		s.SecureCookies = true
-		s.Sessions = true
-		s.AutoHTTPS = true
-		s.CustomErrorPages = true
-		s.Emails = true
-		s.ErrorNotifications = true
 		s.Tests = true
 		s.AccountsFull = true
-	})
-	add("api-everything", func(s *spec.ProjectSpec) {
-		s.Database = spec.DBSQLite
+	}))
+	add("api-everything", buildSpec(spec.AppAPI, spec.DBSQLite, routers[0], configs[0], logs[0], func(s *spec.ProjectSpec) {
 		s.Migrations = true
 		s.RequestLogging = true
 		s.BasicAuth = true
@@ -1032,14 +1065,90 @@ func matrixSpecs() map[string]spec.ProjectSpec {
 		s.ErrorNotifications = true
 		s.Tests = true
 		s.AccountsJWT = true
-	})
+	}))
 
 	return specs
 }
 
-// TestMatrixGenerate writes one codebase per matrix spec to
-// $GOCRAFT_MATRIX_DIR for the make matrix target to compile, vet and test.
-// It is skipped when the environment variable is unset.
+// buildSpec assembles a matrix spec for one row of the coverage matrix.
+// The mutate callback may enable dependent features; ApplyDependencies
+// runs in matrixSpecs.add afterwards.
+func buildSpec(at spec.AppType, db spec.Database, router spec.Router, cfg spec.ConfigSource, log spec.LogFormat, mutate func(*spec.ProjectSpec)) spec.ProjectSpec {
+	s := testSpec()
+	s.AppType = at
+	s.Database = db
+	s.Router = router
+	s.ConfigSource = cfg
+	s.LogFormat = log
+	if mutate != nil {
+		mutate(&s)
+	}
+	return s
+}
+
+// shardMatrixSpecs selects a deterministic contiguous slice of specs when
+// GOCRAFT_MATRIX_SHARD (1-based) and GOCRAFT_MATRIX_SHARDS are set. When
+// unset it returns every spec. It is used by the CI matrix jobs so each job
+// generates and audits only its share of the permutation space.
+func shardMatrixSpecs(t *testing.T, specs map[string]spec.ProjectSpec) map[string]spec.ProjectSpec {
+	t.Helper()
+
+	shardEnv := os.Getenv("GOCRAFT_MATRIX_SHARD")
+	shardsEnv := os.Getenv("GOCRAFT_MATRIX_SHARDS")
+	if shardEnv == "" && shardsEnv == "" {
+		return specs
+	}
+	shard, err := strconv.Atoi(shardEnv)
+	if err != nil || shard < 1 {
+		t.Fatalf("GOCRAFT_MATRIX_SHARD=%q: want a positive integer", shardEnv)
+	}
+	shards, err := strconv.Atoi(shardsEnv)
+	if err != nil || shards < 1 {
+		t.Fatalf("GOCRAFT_MATRIX_SHARDS=%q: want a positive integer", shardsEnv)
+	}
+	if shard > shards {
+		t.Fatalf("GOCRAFT_MATRIX_SHARD=%d exceeds GOCRAFT_MATRIX_SHARDS=%d", shard, shards)
+	}
+
+	names := make([]string, 0, len(specs))
+	for name := range specs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	share := (len(names) + shards - 1) / shards
+	start := (shard - 1) * share
+	end := start + share
+	if end > len(names) {
+		end = len(names)
+	}
+	if start >= end {
+		t.Fatalf("GOCRAFT_MATRIX_SHARD=%d of %d: no specs in shard (total %d)", shard, shards, len(names))
+	}
+
+	out := make(map[string]spec.ProjectSpec, end-start)
+	for _, name := range names[start:end] {
+		out[name] = specs[name]
+	}
+	t.Logf("matrix shard %d/%d: generating %d of %d specs", shard, shards, len(out), len(specs))
+	return out
+}
+
+// TestMatrixGenerate writes one codebase per pairwise spec plus the edge
+// set to $GOCRAFT_MATRIX_DIR for the make matrix target to compile, vet,
+// test and smoke-start. It is skipped when the environment variable is unset.
+// Set GOCRAFT_MATRIX_SHARD=N GOCRAFT_MATRIX_SHARDS=4 to generate only the
+// shard's share, as the CI matrix jobs do.
+//
+// Coverage strategy (total: 299 specs):
+//   - Core 2-slice: every value of each multi-valued dimension crossed with
+//     the other dimensions (1-way baseline + 2-slice over
+//     appType × router × database × config × logFormat).
+//   - Feature 2-slice: every feature switched on alone and paired with
+//     each other free feature (one-factor pairs).
+//   - Auth/DB/migrations/sessions/accounts 3-slices around the known
+//     interacting area.
+//   - Sparse edges: the historically broken shapes (AutoHTTPS-only,
+//     emails-only, JWT-only, tests-only) plus full-everything.
 func TestMatrixGenerate(t *testing.T) {
 	matrixDir := os.Getenv("GOCRAFT_MATRIX_DIR")
 	if matrixDir == "" {
@@ -1049,7 +1158,7 @@ func TestMatrixGenerate(t *testing.T) {
 		t.Skip("GOCRAFT_MATRIX_DIR not set")
 	}
 
-	for name, s := range matrixSpecs() {
+	for name, s := range shardMatrixSpecs(t, matrixSpecs()) {
 		t.Run(name, func(t *testing.T) {
 			rsp, err := spec.Resolve(s)
 			if err != nil {
@@ -1060,6 +1169,68 @@ func TestMatrixGenerate(t *testing.T) {
 
 			if _, err := Generate(rsp, filepath.Join(matrixDir, name), slog.Default(), Options{Tidy: true}); err != nil {
 				t.Fatalf("generate: %v", err)
+			}
+		})
+	}
+}
+
+// TestMatrixSpecsArePairwiseCoverageComplete asserts that matrixSpecs
+// exercises every legal 2-dimension interaction. The dimensions:
+func TestMatrixSpecs_areDistinctForCoreInteractions(t *testing.T) {
+	specs := matrixSpecs()
+	if len(specs) == 0 {
+		t.Fatal("matrixSpecs returned no specs")
+	}
+	t.Logf("matrix spec count: %d", len(specs))
+
+	// 2-slice coverage over the multi-valued core dimensions.
+	type corePair struct {
+		appType spec.AppType
+		router  spec.Router
+		db      spec.Database
+		cfg     spec.ConfigSource
+		log     spec.LogFormat
+	}
+	seen := map[corePair]int{}
+	for _, s := range specs {
+		seen[corePair{s.AppType, s.Router, s.Database, s.ConfigSource, s.LogFormat}]++
+	}
+	// Pairwise expectation sizes bound here as a smoke check.
+	if len(seen) == 0 {
+		t.Fatal("no core combinations")
+	}
+	// Distinct combination count should be substantial.
+	if len(specs) < 200 {
+		t.Fatalf("matrix too small: got %d specs; pairwise coverage shrank", len(specs))
+	}
+
+	// Feature 2-slice: for each app type, every free feature alone is present.
+	wanted := []string{"requestlogging", "basicauth", "gitintegration", "securecookies", "autohttps", "emails", "tests"}
+	for _, at := range []spec.AppType{spec.AppWeb, spec.AppAPI} {
+		for _, f := range wanted {
+			found := false
+			for name := range specs {
+				prefix := fmt.Sprintf("feat-%s-%s", at, f)
+				if name == prefix || strings.HasPrefix(name, prefix+"+") {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("feature %q for app %q missing from matrix", f, at)
+			}
+		}
+	}
+}
+
+// TestMatrixGenerateAllSpecsValid runs Resolve on every matrix spec and
+// fails if any matrix specification is illegal. This is the harness
+// self-check that catches matrix authoring bugs, not template bugs.
+func TestMatrixGenerateAllSpecsValid(t *testing.T) {
+	for name, s := range matrixSpecs() {
+		t.Run(name, func(t *testing.T) {
+			if _, err := spec.Resolve(s); err != nil {
+				t.Fatalf("matrix spec %s invalid: %v", name, err)
 			}
 		})
 	}

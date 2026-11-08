@@ -23,12 +23,13 @@ type option struct {
 }
 
 type question struct {
-	id          string
-	category    string
-	title       string
-	desc        string
-	kind        questionKind
-	placeholder string
+	id             string
+	category       string
+	title          string
+	desc           string
+	kind           questionKind
+	placeholder    string
+	defaultOnEmpty string
 
 	options  func(v *wizardValues) []option
 	visible  func(v *wizardValues) bool
@@ -43,13 +44,13 @@ func getQuestions(v *wizardValues) []question {
 			id:       "app_type",
 			category: "Architecture",
 			title:    "Application Type",
-			desc:     "Defines codebase structure, HTTP response conventions, and asset pipeline.",
+			desc:     "Codebase shape: web app with HTML, or a JSON API.",
 			kind:     kindSelect,
 			str:      &v.appType,
 			options: func(*wizardValues) []option {
 				return []option{
-					{"Traditional web application — server-side HTML rendering", string(spec.AppWeb)},
-					{"JSON API — structured JSON request and response payloads", string(spec.AppAPI)},
+					{"Web app — server-rendered HTML", string(spec.AppWeb)},
+					{"JSON API", string(spec.AppAPI)},
 				}
 			},
 		},
@@ -57,13 +58,13 @@ func getQuestions(v *wizardValues) []question {
 			id:          "module",
 			category:    "Architecture",
 			title:       "Module Path",
-			desc:        "Go module import path used throughout every package declaration.",
+			desc:        "Import path for every generated package.",
 			kind:        kindText,
 			str:         &v.modulePath,
 			placeholder: "example.com/myapp",
 			validate: func(val string) error {
 				if val == "" {
-					return fmt.Errorf("module path is required")
+					return fmt.Errorf("module path is required (e.g. github.com/you/app)")
 				}
 				if err := module.CheckPath(val); err != nil {
 					return fmt.Errorf("invalid Go module path: %w", err)
@@ -75,15 +76,15 @@ func getQuestions(v *wizardValues) []question {
 			id:       "database",
 			category: "Persistence",
 			title:    "Database Engine",
-			desc:     "SQL database driver, connection pool lifecycle, and query models.",
+			desc:     "Driver, pooling and query models.",
 			kind:     kindSelect,
 			str:      &v.database,
 			options: func(*wizardValues) []option {
 				return []option{
-					{"None — stateless application without database connectivity", string(spec.DBNone)},
-					{"SQLite — lightweight, CGO-free modernc.org/sqlite embedded database", string(spec.DBSQLite)},
-					{"PostgreSQL — production pgx/v5 connection pool with binary protocols", string(spec.DBPostgres)},
-					{"MySQL — battle-tested go-sql-driver with native datetime parsing", string(spec.DBMySQL)},
+					{"None — no database", string(spec.DBNone)},
+					{"SQLite — embedded, no CGO", string(spec.DBSQLite)},
+					{"PostgreSQL — pgx/v5 pool", string(spec.DBPostgres)},
+					{"MySQL — go-sql-driver", string(spec.DBMySQL)},
 				}
 			},
 		},
@@ -91,16 +92,16 @@ func getQuestions(v *wizardValues) []question {
 			id:       "router",
 			category: "Architecture",
 			title:    "HTTP Router",
-			desc:     "Request multiplexer powering route declarations and path parameters.",
+			desc:     "Route declarations and path parameters.",
 			kind:     kindSelect,
 			str:      &v.router,
 			options: func(*wizardValues) []option {
 				return []option{
-					{"http.ServeMux — Go standard library multiplexer with method matching", string(spec.RouterServeMux)},
-					{"Flow — lightweight pattern-matching router by Alex Edwards", string(spec.RouterFlow)},
-					{"Chi — composable, 100% standard-library-compatible middleware router", string(spec.RouterChi)},
-					{"Gorilla Mux — feature-rich router with regex and prefix support", string(spec.RouterGorilla)},
-					{"HttpRouter — high-performance radix-tree routing engine", string(spec.RouterHttpRouter)},
+					{"http.ServeMux — standard library, method matching", string(spec.RouterServeMux)},
+					{"Flow — tiny pattern matcher", string(spec.RouterFlow)},
+					{"Chi — composable, stdlib-compatible", string(spec.RouterChi)},
+					{"Gorilla mux — regex and prefixes", string(spec.RouterGorilla)},
+					{"httprouter — radix tree, fast", string(spec.RouterHttpRouter)},
 				}
 			},
 		},
@@ -108,13 +109,13 @@ func getQuestions(v *wizardValues) []question {
 			id:       "config",
 			category: "Environment",
 			title:    "Configuration Source",
-			desc:     "Where application settings and secrets are parsed on startup.",
+			desc:     "Where settings and secrets are read at startup.",
 			kind:     kindSelect,
 			str:      &v.configSource,
 			options: func(*wizardValues) []option {
 				return []option{
-					{"Command-line flags — parsed via standard flag package with --help overview", string(spec.ConfigFlags)},
-					{"Environment variables — read via internal/env with fail-fast validation", string(spec.ConfigEnv)},
+					{"Command-line flags — standard flag package", string(spec.ConfigFlags)},
+					{"Environment variables — via internal/env", string(spec.ConfigEnv)},
 				}
 			},
 		},
@@ -122,14 +123,14 @@ func getQuestions(v *wizardValues) []question {
 			id:       "log",
 			category: "Environment",
 			title:    "Log Format",
-			desc:     "slog structured logger output format sent to standard output.",
+			desc:     "slog output format.",
 			kind:     kindSelect,
 			str:      &v.logFormat,
 			options: func(*wizardValues) []option {
 				return []option{
-					{"Plaintext — standard human-readable key=value output", string(spec.LogPlaintext)},
-					{"JSON — machine-readable JSON objects for log aggregators", string(spec.LogJSON)},
-					{"Colorized — dev-friendly timestamped logs with colored levels", string(spec.LogColorized)},
+					{"Plaintext — key=value", string(spec.LogPlaintext)},
+					{"JSON — for log aggregators", string(spec.LogJSON)},
+					{"Colorized — dev, colored levels", string(spec.LogColorized)},
 				}
 			},
 		},
@@ -137,7 +138,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "migrations",
 			category: "Persistence",
 			title:    "SQL Migrations",
-			desc:     "Embedded SQL migrations with startup auto-apply and Makefile targets.",
+			desc:     "Embedded SQL, auto-applied on start. Makefile targets included.",
 			kind:     kindBool,
 			boolean:  &v.migrations,
 			visible: func(v *wizardValues) bool {
@@ -159,7 +160,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "request_logging",
 			category: "Observability",
 			title:    "Request Logging",
-			desc:     "Middleware recording client IP, method, URI, protocol, status, and size.",
+			desc:     "Logs IP, method, URI, status and size per request.",
 			kind:     kindBool,
 			boolean:  &v.requestLogging,
 		},
@@ -167,7 +168,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "basic_auth",
 			category: "Security",
 			title:    "HTTP Basic Authentication",
-			desc:     "bcrypt-hashed password verification protecting endpoints with 401 challenges.",
+			desc:     "Protect endpoints with bcrypt basic auth.",
 			kind:     kindBool,
 			boolean:  &v.basicAuth,
 		},
@@ -175,7 +176,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "git_integration",
 			category: "Environment",
 			title:    "Git Integration",
-			desc:     "Production .gitignore and runtime Git version & revision metadata helpers.",
+			desc:     ".gitignore plus runtime version metadata from git.",
 			kind:     kindBool,
 			boolean:  &v.gitIntegration,
 		},
@@ -183,7 +184,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "secure_cookies",
 			category: "Security",
 			title:    "Secure Cookies",
-			desc:     "HMAC-SHA256 signing and AES-256-GCM encryption helpers in internal/cookies.",
+			desc:     "HMAC-SHA256 / AES-256-GCM helpers in internal/cookies.",
 			kind:     kindBool,
 			boolean:  &v.secureCookies,
 		},
@@ -191,7 +192,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "auto_https",
 			category: "Platform",
 			title:    "Automatic HTTPS",
-			desc:     "Let's Encrypt TLS certificates via autocert with port 80 HTTP-to-HTTPS redirect.",
+			desc:     "Let's Encrypt TLS via autocert. Port 80 redirects to HTTPS.",
 			kind:     kindBool,
 			boolean:  &v.autoHTTPS,
 		},
@@ -199,7 +200,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "custom_error_pages",
 			category: "Presentation",
 			title:    "Custom Error Pages",
-			desc:     "Branded, friendly 400, 401, 404, and 500 error templates in pages/errors/.",
+			desc:     "Branded 400, 401, 404, 500 pages in pages/errors/.",
 			kind:     kindBool,
 			boolean:  &v.customErrorPages,
 			visible: func(v *wizardValues) bool {
@@ -210,7 +211,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "emails",
 			category: "Services",
 			title:    "Outgoing Emails",
-			desc:     "SMTP mailer helpers with multi-part text and HTML email templates.",
+			desc:     "SMTP mailer with multipart text/HTML templates.",
 			kind:     kindBool,
 			boolean:  &v.emails,
 		},
@@ -218,7 +219,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "error_notifications",
 			category: "Observability",
 			title:    "Runtime Error Notifications",
-			desc:     "Automatically email panic and 500 error stack traces to an admin address.",
+			desc:     "Email panics and 500 stack traces to an admin.",
 			kind:     kindBool,
 			boolean:  &v.errorNotifs,
 			visible: func(v *wizardValues) bool {
@@ -229,7 +230,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "tests",
 			category: "Quality",
 			title:    "Test Suites",
-			desc:     "Comprehensive handler, route, and authentication test suite with helpers.",
+			desc:     "Handler, route and auth tests with helpers.",
 			kind:     kindBool,
 			boolean:  &v.tests,
 		},
@@ -237,27 +238,28 @@ func getQuestions(v *wizardValues) []question {
 			id:       "accounts",
 			category: "Security",
 			title:    "User Accounts & Authentication",
-			desc:     "Complete identity lifecycle with password hashing, sessions, or JWT tokens.",
+			desc:     "Signup, login, reset; sessions for web, JWT for APIs.",
 			kind:     kindSelect,
 			str:      &v.accounts,
 			options: func(v *wizardValues) []option {
-				opts := []option{{"None — no user authentication system", "none"}}
+				opts := []option{{"None", "none"}}
 				if v.appType == string(spec.AppWeb) {
-					opts = append(opts, option{"Full — signup, login, logout, password reset, and CSRF protection", "full"})
+					opts = append(opts, option{"Full — signup, login, reset, CSRF", "full"})
 				} else {
-					opts = append(opts, option{"JWT — JSON Web Token registration, activation, and bearer tokens", "jwt"})
+					opts = append(opts, option{"JWT — register, activate, bearer tokens", "jwt"})
 				}
 				return opts
 			},
 		},
 		{
-			id:          "target",
-			category:    "Output",
-			title:       "Target Directory",
-			desc:        "Local file path to scaffold into. Must not exist, or must be empty.",
-			kind:        kindText,
-			str:         &v.targetDir,
-			placeholder: "./my-app",
+			id:             "target",
+			category:       "Output",
+			title:          "Target Directory",
+			desc:           "Must not exist or be empty. Defaults to ./my-app.",
+			kind:           kindText,
+			str:            &v.targetDir,
+			placeholder:    "./my-app",
+			defaultOnEmpty: "./my-app",
 			validate: func(val string) error {
 				if val == "" {
 					return fmt.Errorf("target directory is required")
@@ -286,7 +288,7 @@ func getQuestions(v *wizardValues) []question {
 			id:       "review",
 			category: "Generate",
 			title:    "Configuration Review",
-			desc:     "Verify selections. Press a number key [1-9] to edit any step directly, or Enter to generate.",
+			desc:     "Verify selections. [1-9] edits a line, enter generates.",
 			kind:     kindReview,
 		},
 	}

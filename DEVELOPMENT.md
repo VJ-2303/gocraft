@@ -88,7 +88,7 @@ make matrix
 ```
 
 > [!TIP]
-> `make gate` is the recommended fast verification loop for local iteration. `make matrix` runs exhaustive 32-combination audits and is required when editing template files.
+> `make gate` is the recommended fast verification loop for local iteration. `make matrix` runs exhaustive 299 pairwise-combination audits and is required when editing template files.
 
 If `make gate` or `make matrix` fails with "target directory is not empty" after an interrupted run, clean the temporary directories first:
 

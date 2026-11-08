@@ -10,8 +10,48 @@ permissions:
   contents: write
 
 jobs:
+  verify-matrix:
+    name: Verify matrix (pairwise, shard ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Resolve Go cache paths
+        id: goenv
+        run: |
+          echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+          echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Go build and module caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.goenv.outputs.gocache }}
+            ${{ steps.goenv.outputs.gomodcache }}
+          key: ${{ runner.os }}-go-matrix-${{ hashFiles('go.mod', 'go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-matrix-
+
+      - name: Warm module cache
+        run: go mod download
+
+      - name: Generate and audit shard ${{ matrix.shard }}
+        run: make matrix-shard MATRIX_SHARD=${{ matrix.shard }} MATRIX_SHARDS=4 MATRIX_DIR=/tmp/gocraft-matrix
+
   release:
     name: Build & Release
+    needs: [verify-matrix]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
